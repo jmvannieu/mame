@@ -870,6 +870,9 @@ private:
 
 	void sdmg2_keys_hopper_w(u8 data);
 
+	void sdmg2p_counter_w(u8 data);
+	void sdmg2p_sound_hopper_w(u8 data);
+
 	void slqz2_sound_hopper_w(u8 data);
 	u8 slqz2_scramble_data_r();
 
@@ -2325,6 +2328,11 @@ void igs017_state::init_jking302us()
 		rom[i] = x;
 	}
 
+	// IGS029 send command
+	//rom[0x5f32/2] = 0x6010;
+	//rom[0x5f7e/2] = 0x4e75;
+	//rom[0x5fa6/2] = 0x6006;
+
 	m_igs017_igs031->tarzan_decrypt_tiles(1); // TODO: verify once it works
 	m_igs017_igs031->tarzan_decrypt_sprites(0, 0); // TODO: verify once it works
 
@@ -3015,6 +3023,24 @@ void igs017_state::mgdh_mux_map(address_map &map)
 
 // sdmg2p
 
+void igs017_state::sdmg2p_counter_w(u8 data)
+{
+	machine().bookkeeping().coin_counter_w(1, BIT(data, 1));   // coin out counter
+	machine().bookkeeping().coin_counter_w(0, BIT(data, 0));   // coin in  counter
+
+	if (data & ~0x03)
+		logerror("%s: warning, unknown bits written in counter_w = %02x\n", machine().describe_context(), data);
+}
+
+void igs017_state::sdmg2p_sound_hopper_w(u8 data)
+{
+	m_hopper->motor_w(BIT(data, 6));
+	m_oki->set_rom_bank(BIT(data, 7));
+
+	if (data & ~0xc0)
+		logerror("%s: warning, unknown bits written in sound_hopper_w = %02x\n", machine().describe_context(), data);
+}
+
 void igs017_state::sdmg2p_map(address_map &map)
 {
 	map(0x000000, 0x07ffff).rom();
@@ -3034,13 +3060,13 @@ void igs017_state::sdmg2p_map(address_map &map)
 	map(0xb10001, 0xb10001).rw(m_oki, FUNC(okim6295_device::read), FUNC(okim6295_device::write));
 }
 
-void igs017_state::sdmg2p_mux_map(address_map &map) // TODO: hopper motor w
+void igs017_state::sdmg2p_mux_map(address_map &map)
 {
 	map.unmap_value_high();
-	map(0x00, 0x00).r(NAME((&igs017_state::keys_ipt_r<u8, 2, 2>)));
+	map(0x00, 0x00).r(NAME((&igs017_state::keys_ipt_r<u8, 2, 2>))).w(FUNC(igs017_state::sdmg2p_counter_w));
 	map(0x01, 0x01).portr("JOY");
-	map(0x02, 0x02).portr("BUTTONS").w(FUNC(igs017_state::mgdh_keys_hopper_w));
-	map(0x03, 0x03).portr("COINS").w(NAME((&igs017_state::oki_sound_bank_w<7, 0x7f>)));
+	map(0x02, 0x02).portr("BUTTONS");
+	map(0x03, 0x03).portr("COINS").w(FUNC(igs017_state::sdmg2p_sound_hopper_w));
 
 	igs_string_mux_map(map);
 }
@@ -6600,7 +6626,7 @@ GAME ( 1999,  tarzanc,     0,        tarzan,     tarzan,      igs017_state, init
 GAME ( 1999,  tarzan,      tarzanc,  tarzan,     tarzan,      igs017_state, init_tarzan,     ROT0, "IGS", "Tarzan Chuang Tian Guan (China, V109C, set 2)",                      MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION ) // missing sprites and sound ROM, imperfect tiles decryption
 GAME ( 1999,  tarzana,     tarzanc,  tarzan,     tarzan,      igs017_state, init_tarzana,    ROT0, "IGS", "Tarzan (V107)",                                                      MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION ) // missing IGS029 protection, missing sprites and sound ROM
 GAME ( 1999,  tarzanb,     tarzanc,  tarzan,     tarzan,      igs017_state, init_tarzanc,    ROT0, "IGS", "Tarzan Chuang Tian Guan (China, V110)",                              MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION )
-GAME ( 2000,  sdmg2p,      0,        sdmg2p,     sdmg2p,      igs017_state, init_sdmg2p,     ROT0, "IGS", "Maque Wangchao / Chaoji Da Manguan 2 - Jiaqiang Ban (China, V100C)", MACHINE_NOT_WORKING ) // 麻雀王朝 / 超級大滿貫 2 -加強版 hopper isn't hooked up correctly
+GAME ( 2000,  sdmg2p,      0,        sdmg2p,     sdmg2p,      igs017_state, init_sdmg2p,     ROT0, "IGS", "Maque Wangchao / Chaoji Da Manguan 2 - Jiaqiang Ban (China, V100C)", 0 ) // 麻雀王朝 / 超級大滿貫 2 -加強版
 GAMEL( 2000?, starzan,     0,        starzan,    starzan,     igs017_state, init_starzan,    ROT0, "IGS (G.F. Gioca license)", "Super Tarzan (Italy, V100I)",                   MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION, layout_starzan )
 GAMEL( 2000?, jking103a,   starzan,  starzan,    starzan,     igs017_state, init_jking103a,  ROT0, "IGS", "Jungle King (V103A)",                                                MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION, layout_starzan )
 GAMEL( 2000?, jking105us,  starzan,  starzan,    tarzan202fa, igs017_state, init_jking103a,  ROT0, "IGS", "Jungle King (V105US)",                                               MACHINE_NOT_WORKING | MACHINE_UNEMULATED_PROTECTION, layout_starzan )
