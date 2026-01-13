@@ -3384,16 +3384,9 @@ if opt_tool(CPUS, "LC58") then
 end
 
 --------------------------------------------------
--- LC6500 series
---@src/devices/cpu/lc6500/lc6554.h,CPUS["LC6500"] = true
+-- Sanyo LC6500, disassembler only
+--@src/devices/cpu/lc6500/lc6500.h,CPUS["LC6500"] = true
 --------------------------------------------------
-
-if CPUS["LC6500"] then
-	files {
-		MAME_DIR .. "src/devices/cpu/lc6500/lc6554.cpp",
-		MAME_DIR .. "src/devices/cpu/lc6500/lc6554.h",
-	}
-end
 
 if opt_tool(CPUS, "LC6500") then
 	table.insert(disasm_files , MAME_DIR .. "src/devices/cpu/lc6500/lc6500_dasm.cpp")
