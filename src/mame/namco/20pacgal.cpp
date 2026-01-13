@@ -87,8 +87,8 @@ Graphics: CY37256P160-83AC x 2 (Ultra37000 CPLD family - 160 pin TQFP, 256 Macro
    VSync: 60.60175Hz
 
     The DAC (of the Namco sound chip, apparently combined with the generic DAC)
-    is the same as on the old Pac-Man hardware, controlled by 8 lines from a
-    CPLD (4 for sound, 4 for volume).
+    is the same as on the old Pac-Man hardware, digital output is 8 lines from
+    a CPLD.
 
 ***************************************************************************/
 
