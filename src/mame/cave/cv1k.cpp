@@ -126,7 +126,7 @@ Dipswitches & Push Buttons:
 Connectors:
  P2 (IDC CONNECTOR 20 PIN) function unknown, P2 is not always mounted
  P4 (IDC CONNECTOR 14 PIN) JTAG connector
- P8 (IDC CONNECTOR 10 PIN) Advanced User Debugger063194
+ P8 (IDC CONNECTOR 10 PIN) Advanced User Debugger
  P3 (CONNECTOR) Most likely an expansion port, P3 is not always mounted
  P5 (CONNECTOR) D9 serial connector. Used for the mahjong Touchscreen titles.  Also mounted on early Mushihime-Sama PCB's
  P7 (CONNECTOR) Network port pinout. Never seen mounted on any PCB.
@@ -280,7 +280,7 @@ uint64_t cv1k_state::flash_port_e_r()
 	return ((!m_nand->is_busy() ? 0x20 : 0x00)) | 0xdf;
 }
 
-063194
+
 uint8_t cv1k_state::flash_io_r(offs_t offset)
 {
 	switch (offset)
