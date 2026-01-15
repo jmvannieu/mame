@@ -43,16 +43,19 @@ jobs:
             executable: mame
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@main
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools
+
     - name: Install clang
       if: matrix.compiler == 'clang'
       run: sudo apt-get install -y clang
+
     - name: Build
       env:
         OVERRIDE_CC: ${{ matrix.cc }}
@@ -60,21 +63,37 @@ jobs:
         ARCHOPTS: ${{ matrix.archopts }}
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
-      run: make -j3
+      run: make -j$(nproc)
+
     - name: Validate
       run: ./${{ matrix.executable }} -validate
+
     - name: Reconcile driver list
       run: ./${{ matrix.executable }} -listxml | python scripts/build/makedep.py reconcilelist -l src/mame/${{ matrix.subtarget }}.lst -
+
     - name: ORM check
       run: python scripts/minimaws/minimaws.py load --executable ./${{ matrix.executable }} --softwarepath hash
-    - uses: actions/upload-artifact@main
+
+    # Packaging step with the tag included in the filename
+    - name: Package Binaries
+      if: startsWith(github.ref, 'refs/tags/mame')
+      run: |
+        strip ${{ matrix.executable }} chdman unidasm
+        tar -cvzf ${{ github.ref_name }}_linux_${{ matrix.executable }}_${{ matrix.compiler }}.tar.gz \
+          ${{ matrix.executable }} \
+          chdman \
+          unidasm
+
+    - uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.executable }}-linux-${{ matrix.compiler }}-${{ github.sha }}
+        name: ${{ matrix.executable }}-linux-${{ matrix.compiler }}
         path: |
+          *.tar.gz
           ${{ matrix.executable }}
           chdman
           unidasm
         if-no-files-found: error
+
   release:
     needs: build-linux
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/mame')
