@@ -29,6 +29,7 @@ jobs:
     strategy:
       matrix:
         compiler: [gcc, clang]
+        arch: [x64]
         include:
           - compiler: gcc
             cc: gcc
@@ -47,10 +48,18 @@ jobs:
       with:
         fetch-depth: 0
 
+    - name: ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.subtarget }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.subtarget }}-
+
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools
+        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools ccache
 
     - name: Install clang
       if: matrix.compiler == 'clang'
@@ -58,8 +67,9 @@ jobs:
 
     - name: Build
       env:
-        OVERRIDE_CC: ${{ matrix.cc }}
-        OVERRIDE_CXX: ${{ matrix.cxx }}
+        # Compiler overrides now use ccache prefix
+        OVERRIDE_CC: ccache ${{ matrix.cc }}
+        OVERRIDE_CXX: ccache ${{ matrix.cxx }}
         ARCHOPTS: ${{ matrix.archopts }}
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
@@ -79,7 +89,7 @@ jobs:
       if: startsWith(github.ref, 'refs/tags/mame')
       run: |
         strip ${{ matrix.executable }} chdman unidasm
-        tar -cvzf ${{ github.ref_name }}_linux_${{ matrix.executable }}_${{ matrix.compiler }}.tar.gz \
+        tar -cvzf ${{ github.ref_name }}_linux_${{ matrix.arch }}_${{ matrix.executable }}_${{ matrix.compiler }}.tar.gz \
           ${{ matrix.executable }} \
           chdman \
           unidasm
@@ -100,6 +110,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      pull-requests: write
     steps:
       - name: Download all artifacts
         uses: actions/download-artifact@v4
