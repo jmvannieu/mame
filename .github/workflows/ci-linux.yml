@@ -61,6 +61,13 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools ccache
 
+    - name: Force ccache symlinks
+      run: |
+        # This creates a folder of 'fake' gcc/g++ binaries that point to ccache
+        sudo /usr/sbin/update-ccache-symlinks
+        # We put this folder at the start of PATH so 'gcc' ALWAYS hits ccache first
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
+
     - name: Install clang
       if: matrix.compiler == 'clang'
       run: sudo apt-get install -y clang
@@ -68,12 +75,16 @@ jobs:
     - name: Build
       env:
         # Compiler overrides now use ccache prefix
-        OVERRIDE_CC: ccache ${{ matrix.cc }}
-        OVERRIDE_CXX: ccache ${{ matrix.cxx }}
+        OVERRIDE_CC: ${{ matrix.cc }}
+        OVERRIDE_CXX: ${{ matrix.cxx }}
         ARCHOPTS: ${{ matrix.archopts }}
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
-      run: make -j$(nproc)
+      run: |
+        ccache -p
+        ccache -z
+        make -j$(nproc)
+        ccache -s
 
     - name: Validate
       run: ./${{ matrix.executable }} -validate
