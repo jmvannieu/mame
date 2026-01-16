@@ -55,7 +55,7 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.msys }}
-        install: git make ${{ matrix.slug }}-${{ matrix.cc }} ${{ matrix.slug }}-python ${{ matrix.slug }}-lld ${{ matrix.slug }}-llvm ${{ matrix.slug }}-libc++ ${{ matrix.extrapkg }} ${{ matrix.slug }}-ccache ${{ matrix.slug }}-p7zip
+        install: git make ${{ matrix.slug }}-${{ matrix.cc }} ${{ matrix.slug }}-python ${{ matrix.slug }}-lld ${{ matrix.slug }}-llvm ${{ matrix.slug }}-libc++ ${{ matrix.extrapkg }} ${{ matrix.slug }}-ccache ${{ matrix.slug }}-7zip
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
