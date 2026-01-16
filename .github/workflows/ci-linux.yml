@@ -28,15 +28,9 @@ jobs:
   build-linux:
     strategy:
       matrix:
-        compiler: [gcc, clang]
+        compiler: [clang]
         arch: [x64]
         include:
-          - compiler: gcc
-            cc: gcc
-            cxx: g++
-            archopts: -U_FORTIFY_SOURCE
-            subtarget: tiny
-            executable: mametiny
           - compiler: clang
             cc: clang
             cxx: clang++
@@ -63,9 +57,7 @@ jobs:
 
     - name: Force ccache symlinks
       run: |
-        # This creates a folder of 'fake' gcc/g++ binaries that point to ccache
         sudo /usr/sbin/update-ccache-symlinks
-        # We put this folder at the start of PATH so 'gcc' ALWAYS hits ccache first
         echo "/usr/lib/ccache" >> $GITHUB_PATH
 
     - name: Install clang
@@ -81,7 +73,8 @@ jobs:
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
       run: |
-        ccache -p
+        ccache --set-config=max_size=10G
+        ccache --set-config=compression=true
         ccache -z
         make -j$(nproc)
         ccache -s
@@ -95,7 +88,6 @@ jobs:
     - name: ORM check
       run: python scripts/minimaws/minimaws.py load --executable ./${{ matrix.executable }} --softwarepath hash
 
-    # Packaging step with the tag included in the filename
     - name: Package Binaries
       if: startsWith(github.ref, 'refs/tags/mame')
       run: |
@@ -139,5 +131,6 @@ jobs:
           name: Release ${{ github.ref_name }}
           files: ./out/*.tar.gz
           generate_release_notes: true
+          append_body: true
           draft: false
           prerelease: false
