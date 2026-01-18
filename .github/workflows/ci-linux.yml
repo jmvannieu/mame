@@ -22,19 +22,15 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   build-linux:
     strategy:
       matrix:
-        compiler: [gcc, clang]
+        compiler: [clang]
+        arch: [x64]
         include:
-          - compiler: gcc
-            cc: gcc
-            cxx: g++
-            archopts: -U_FORTIFY_SOURCE
-            subtarget: tiny
-            executable: mametiny
           - compiler: clang
             cc: clang
             cxx: clang++
@@ -42,35 +38,99 @@ jobs:
             executable: mame
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@main
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: ccache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/ccache
+        key: ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.subtarget }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.compiler }}-${{ matrix.subtarget }}-
+
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools
+        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev libfontconfig-dev libasound2-dev libxinerama-dev libxi-dev qtbase5-dev qtbase5-dev-tools ccache
+
+    - name: Force ccache symlinks
+      run: |
+        sudo /usr/sbin/update-ccache-symlinks
+        echo "/usr/lib/ccache" >> $GITHUB_PATH
+
     - name: Install clang
       if: matrix.compiler == 'clang'
       run: sudo apt-get install -y clang
+
     - name: Build
       env:
+        # Compiler overrides now use ccache prefix
         OVERRIDE_CC: ${{ matrix.cc }}
         OVERRIDE_CXX: ${{ matrix.cxx }}
         ARCHOPTS: ${{ matrix.archopts }}
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
-      run: make -j3
+      run: |
+        ccache --set-config=max_size=10G
+        ccache --set-config=compression=true
+        ccache -z
+        make -j$(nproc)
+        ccache -s
+
     - name: Validate
       run: ./${{ matrix.executable }} -validate
+
     - name: Reconcile driver list
       run: ./${{ matrix.executable }} -listxml | python scripts/build/makedep.py reconcilelist -l src/mame/${{ matrix.subtarget }}.lst -
+
     - name: ORM check
       run: python scripts/minimaws/minimaws.py load --executable ./${{ matrix.executable }} --softwarepath hash
-    - uses: actions/upload-artifact@main
+
+    - name: Package Binaries
+      if: startsWith(github.ref, 'refs/tags/mame')
+      run: |
+        strip ${{ matrix.executable }} chdman unidasm
+        tar -cvzf ${{ github.ref_name }}_linux_${{ matrix.arch }}_${{ matrix.executable }}_${{ matrix.compiler }}.tar.gz \
+          ${{ matrix.executable }} \
+          chdman \
+          unidasm
+
+    - uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.executable }}-linux-${{ matrix.compiler }}-${{ github.sha }}
+        name: ${{ matrix.executable }}-linux-${{ matrix.compiler }}
         path: |
+          *.tar.gz
           ${{ matrix.executable }}
           chdman
           unidasm
         if-no-files-found: error
+
+  release:
+    needs: build-linux
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/mame')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all_artifacts
+
+      - name: Move files for release
+        run: |
+          mkdir ./out
+          find ./all_artifacts -name "*.tar.gz" -exec cp {} ./out/ \;
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          files: ./out/*.tar.gz
+          generate_release_notes: true
+          append_body: true
+          draft: false
+          prerelease: false

@@ -20,33 +20,28 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 jobs:
   build-windows:
     strategy:
       matrix:
-        compiler: [gcc-x64, clang-x64, clang-arm64]
+        compiler: [clang-x64, clang-arm64]
         include:
-          - compiler: gcc-x64
-            os: windows-latest
-            msys: MINGW64
-            slug: mingw-w64-x86_64
-            cc: gcc
-            cxx: g++
-            subtarget: mame
-            executable: mame
           - compiler: clang-x64
             os: windows-latest
             msys: MINGW64
             slug: mingw-w64-x86_64
+            arch: x64
             cc: clang
             cxx: clang++
-            subtarget: tiny
-            executable: mametiny
+            subtarget: mame
+            executable: mame
           - compiler: clang-arm64
             os: windows-11-arm
             msys: CLANGARM64
             slug: mingw-w64-clang-aarch64
+            arch: arm64
             extrapkg: mingw-w64-clang-aarch64-gcc-compat
             cc: clang
             cxx: clang++
@@ -60,26 +55,78 @@ jobs:
     - uses: msys2/setup-msys2@v2
       with:
         msystem: ${{ matrix.msys }}
-        install: git make ${{ matrix.slug }}-${{ matrix.cc }} ${{ matrix.slug }}-python ${{ matrix.slug }}-lld ${{ matrix.slug }}-llvm ${{ matrix.slug }}-libc++ ${{ matrix.extrapkg }}
-    - uses: actions/checkout@main
+        install: git make ${{ matrix.slug }}-${{ matrix.cc }} ${{ matrix.slug }}-python ${{ matrix.slug }}-lld ${{ matrix.slug }}-llvm ${{ matrix.slug }}-libc++ ${{ matrix.extrapkg }} ${{ matrix.slug }}-ccache ${{ matrix.slug }}-7zip
+    - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: ccache
+      uses: actions/cache@v4
+      with:
+        path: C:\msys64\home\runneradmin\.ccache
+        key: ${{ runner.os }}-${{ matrix.compiler }}-ccache-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ matrix.compiler }}-ccache-
+
     - name: Build
       env:
         OVERRIDE_AR: "llvm-ar"
-        OVERRIDE_CC: ${{ matrix.cc }}
-        OVERRIDE_CXX: ${{ matrix.cxx }}
+        OVERRIDE_CC: ccache ${{ matrix.cc }}
+        OVERRIDE_CXX: ccache ${{ matrix.cxx }}
         ARCHOPTS: "-fuse-ld=lld"
         SUBTARGET: ${{ matrix.subtarget }}
         TOOLS: 1
-      run: make -j3
+      run: |
+        ccache --set-config=max_size=10G
+        ccache --set-config=compression=true
+        make -j$(nproc)
+        ccache -s
+
     - name: Validate
       run: ./${{ matrix.executable }}.exe -validate
-    - uses: actions/upload-artifact@main
+
+    - name: Package Binaries
+      if: startsWith(github.ref, 'refs/tags/mame')
+      run: |
+        strip ${{ matrix.executable }}.exe chdman.exe unidasm.exe
+        7z a ${{ github.ref_name }}_windows_${{ matrix.arch }}_${{ matrix.executable }}_${{ matrix.compiler }}.zip \
+          ${{ matrix.executable }}.exe \
+          chdman.exe \
+          unidasm.exe
+
+    - uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.executable }}-windows-${{ matrix.compiler }}-${{ github.sha }}
+        name: ${{ matrix.executable }}-windows-${{ matrix.arch }}-${{ matrix.compiler }}
         path: |
+          *.zip
           ${{ matrix.executable }}.exe
           chdman.exe
           unidasm.exe
         if-no-files-found: error
+
+  release:
+    needs: build-windows
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/mame')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: ./all_artifacts
+
+      - name: Move files for release
+        run: |
+          mkdir ./out
+          find ./all_artifacts -name "*.zip" -exec cp {} ./out/ \;
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Release ${{ github.ref_name }}
+          files: ./out/*.zip
+          generate_release_notes: false
+          append_body: true
+          draft: false
+          prerelease: false
