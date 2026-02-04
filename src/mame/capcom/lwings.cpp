@@ -487,7 +487,7 @@ TIMER_DEVICE_CALLBACK_MEMBER(lwings_state::scanline)
 	if (scanline == 128)
 		m_maincpu->set_input_line(0, HOLD_LINE);
 
-	// 4 sound interrupts per frame on V64
+	// 4 sound interrupts per frame on V32
 	if ((scanline % 64) == 32)
 		m_soundcpu->set_input_line(0, HOLD_LINE);
 }
@@ -1254,7 +1254,7 @@ void lwings_state::trojan(machine_config &config)
 
 	MSM5205(config, m_msm, 384_kHz_XTAL); // verified on PCB
 	m_msm->vck_callback().set_inputline(m_adpcmcpu, 0, HOLD_LINE);
-	m_msm->set_prescaler_selector(msm5205_device::S96_4B);
+	m_msm->set_prescaler_selector(msm5205_device::S96_4B); // 4 KHz
 	m_msm->add_route(ALL_OUTPUTS, "mono", 0.50);
 }
 
@@ -1264,7 +1264,7 @@ void lwings_state::avengers(machine_config &config)
 
 	// basic machine hardware
 	m_maincpu->set_clock(12_MHz_XTAL / 2); // verified on PCB
-	m_maincpu->z80_set_memrq_cycles(3+1); // 1 WAIT state per MREQ (but not with RFSH)
+	m_maincpu->z80_set_mreq_cycles(3+1); // 1 WAIT state per MREQ (but not with RFSH)
 	m_maincpu->z80_set_m1_cycles(4+1); // "
 	m_maincpu->set_addrmap(AS_PROGRAM, &lwings_state::avengers_map);
 
