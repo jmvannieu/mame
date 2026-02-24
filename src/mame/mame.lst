@@ -33337,6 +33337,7 @@ quaquiz2
 sextriv
 statriv2
 statriv2v
+statriv3
 statriv4
 statriv5se
 statusbj
@@ -37059,6 +37060,9 @@ visor
 
 @source:palm/palmz22.cpp
 palmz22
+
+@source:pc/agro.cpp
+agro
 
 @source:pc/asst128.cpp
 asst128
@@ -42976,6 +42980,7 @@ prophet5rev30
 
 @source:sequential/prophet600.cpp
 prpht600
+prpht600a
 
 @source:sequential/sixtrak.cpp
 sixtrak
