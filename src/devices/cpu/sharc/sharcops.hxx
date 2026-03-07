@@ -60,6 +60,8 @@
 		}                                                   \
 	}
 
+#define SHARC_COND_LT  ((m_core->astat & AF) ? ((m_core->astat & AN) && !(m_core->astat & AZ)) : (bool(m_core->astat & AN) != ((m_core->astat & AV) && !(m_core->mode1 & MODE1_ALUSAT))))
+#define SHARC_COND_LE  ((m_core->astat & AZ) || ((m_core->astat & AF) ? (m_core->astat & AN) : (bool(m_core->astat & AN) != ((m_core->astat & AV) && !(m_core->mode1 & MODE1_ALUSAT)))))
 
 /*****************************************************************************/
 
@@ -79,30 +81,30 @@ void adsp21062_device::add_systemreg_write_latency_effect(int sysreg, uint32_t d
 
 void adsp21062_device::systemreg_write_latency_effect()
 {
-	uint32_t data = m_core->systemreg_latency_data;
-	uint32_t old_data = m_core->systemreg_previous_data;
+	uint32_t const data = m_core->systemreg_latency_data;
+	uint32_t const old_data = m_core->systemreg_previous_data;
 
 	switch (m_core->systemreg_latency_reg)
 	{
 		case 0xb:   /* MODE1 */
 		{
-			uint32_t oldreg = old_data;
+			uint32_t const diff = data ^ old_data;
 			m_core->mode1 = data;
 
-			if ((data & 0x1) != (oldreg & 0x1))
+			if (diff & MODE1_BR8)
 			{
 				throw emu_fatalerror("%s: systemreg_latency_op: enable I8 bit-reversing", tag());
 			}
-			if ((data & 0x2) != (oldreg & 0x2))
+			if (diff & MODE1_BR0)
 			{
 				throw emu_fatalerror("%s: systemreg_latency_op: enable I0 bit-reversing", tag());
 			}
-			if ((data & 0x4) != (oldreg & 0x4))
+			if (diff & MODE1_SRCU)
 			{
 				throw emu_fatalerror("%s: systemreg_latency_op: enable MR alternate", tag());
 			}
 
-			if ((data & 0x8) != (oldreg & 0x8))         /* Switch DAG1 7-4 */
+			if (diff & MODE1_SRD1H) // Switch DAG1 7-4
 			{
 				using std::swap;
 				swap(m_core->dag1.i[4], m_core->dag1_alt.i[4]);
@@ -122,7 +124,7 @@ void adsp21062_device::systemreg_write_latency_effect()
 				swap(m_core->dag1.b[6], m_core->dag1_alt.b[6]);
 				swap(m_core->dag1.b[7], m_core->dag1_alt.b[7]);
 			}
-			if ((data & 0x10) != (oldreg & 0x10))       /* Switch DAG1 3-0 */
+			if (diff & MODE1_SRD1L) // Switch DAG1 3-0
 			{
 				using std::swap;
 				swap(m_core->dag1.i[0], m_core->dag1_alt.i[0]);
@@ -142,7 +144,7 @@ void adsp21062_device::systemreg_write_latency_effect()
 				swap(m_core->dag1.b[2], m_core->dag1_alt.b[2]);
 				swap(m_core->dag1.b[3], m_core->dag1_alt.b[3]);
 			}
-			if ((data & 0x20) != (oldreg & 0x20))       /* Switch DAG2 15-12 */
+			if (diff & MODE1_SRD2H) // Switch DAG2 15-12
 			{
 				using std::swap;
 				swap(m_core->dag2.i[4], m_core->dag2_alt.i[4]);
@@ -162,7 +164,7 @@ void adsp21062_device::systemreg_write_latency_effect()
 				swap(m_core->dag2.b[6], m_core->dag2_alt.b[6]);
 				swap(m_core->dag2.b[7], m_core->dag2_alt.b[7]);
 			}
-			if ((data & 0x40) != (oldreg & 0x40))       /* Switch DAG2 11-8 */
+			if (diff & MODE1_SRD2L) // Switch DAG2 11-8
 			{
 				using std::swap;
 				swap(m_core->dag2.i[0], m_core->dag2_alt.i[0]);
@@ -182,17 +184,24 @@ void adsp21062_device::systemreg_write_latency_effect()
 				swap(m_core->dag2.b[2], m_core->dag2_alt.b[2]);
 				swap(m_core->dag2.b[3], m_core->dag2_alt.b[3]);
 			}
-			if ((data & 0x80) != (oldreg & 0x80))
+			if (diff & MODE1_SRRFH)
 			{
 				using std::swap;
-				for (int i=8; i<16; i++)
+				for (int i = 8; i < 16; i++)
 					swap(m_core->r[i].r, m_core->reg_alt[i].r);
 			}
-			if ((data & 0x400) != (oldreg & 0x400))
+			if (diff & MODE1_SRRFL)
 			{
 				using std::swap;
-				for (int i=0; i<8; i++)
+				for (int i = 0; i < 8; i++)
 					swap(m_core->r[i].r, m_core->reg_alt[i].r);
+			}
+			if (diff & MODE1_SSE)   // Short word sign extension
+			{
+				if (data & MODE1_SSE)
+					m_dm_short_view.select(0);
+				else
+					m_dm_short_view.disable();
 			}
 			break;
 		}
@@ -842,6 +851,7 @@ void adsp21062_device::COMPUTE(uint32_t opcode)
 					case 0x43:      compute_not(rn, rx); break;
 					case 0x61:      compute_min(rn, rx, ry); break;
 					case 0x62:      compute_max(rn, rx, ry); break;
+					case 0x63:      compute_clip(rn, rx, ry); break;
 					case 0x81:      compute_fadd(rn, rx, ry); break;
 					case 0x82:      compute_fsub(rn, rx, ry); break;
 					case 0x89:      compute_favg(rn, rx, ry); break;
@@ -1210,12 +1220,11 @@ inline void adsp21062_device::POP_STATUS_STACK()
 
 inline int adsp21062_device::IF_CONDITION_CODE(int cond)
 {
-	// TODO: implement AF flag and correct conditions that depend on it (LT, LE, GE, GT)
 	switch (cond)
 	{
 		case 0x00:  return m_core->astat & AZ;        /* EQ */
-		case 0x01:  return !(m_core->astat & AZ) && (m_core->astat & AN);   /* LT */
-		case 0x02:  return (m_core->astat & AZ) || (m_core->astat & AN);    /* LE */
+		case 0x01:  return SHARC_COND_LT;             /* LT */
+		case 0x02:  return SHARC_COND_LE;             /* LE */
 		case 0x03:  return (m_core->astat & AC);      /* AC */
 		case 0x04:  return (m_core->astat & AV);      /* AV */
 		case 0x05:  return (m_core->astat & MV);      /* MV */
@@ -1230,8 +1239,8 @@ inline int adsp21062_device::IF_CONDITION_CODE(int cond)
 		case 0x0e:  return 0;                         /* BM */
 		case 0x0f:  return (m_core->curlcntr != 1);   /* NOT LCE */
 		case 0x10:  return !(m_core->astat & AZ);     /* NOT EQUAL */
-		case 0x11:  return (m_core->astat & AZ) || !(m_core->astat & AN);   /* GE */
-		case 0x12:  return !(m_core->astat & AZ) && !(m_core->astat & AN);  /* GT */
+		case 0x11:  return !SHARC_COND_LT;            /* GE */
+		case 0x12:  return !SHARC_COND_LE;            /* GT */
 		case 0x13:  return !(m_core->astat & AC);     /* NOT AC */
 		case 0x14:  return !(m_core->astat & AV);     /* NOT AV */
 		case 0x15:  return !(m_core->astat & MV);     /* NOT MV */
@@ -1251,12 +1260,11 @@ inline int adsp21062_device::IF_CONDITION_CODE(int cond)
 
 inline int adsp21062_device::DO_CONDITION_CODE(int cond)
 {
-	// TODO: implement AF flag and correct conditions that depend on it (LT, LE, GE, GT)
 	switch (cond)
 	{
 		case 0x00:  return m_core->astat & AZ;        /* EQ */
-		case 0x01:  return !(m_core->astat & AZ) && (m_core->astat & AN);   /* LT */
-		case 0x02:  return (m_core->astat & AZ) || (m_core->astat & AN);    /* LE */
+		case 0x01:  return SHARC_COND_LT;             /* LT */
+		case 0x02:  return SHARC_COND_LE;             /* LE */
 		case 0x03:  return (m_core->astat & AC);      /* AC */
 		case 0x04:  return (m_core->astat & AV);      /* AV */
 		case 0x05:  return (m_core->astat & MV);      /* MV */
@@ -1271,8 +1279,8 @@ inline int adsp21062_device::DO_CONDITION_CODE(int cond)
 		case 0x0e:  return 0;                         /* BM */
 		case 0x0f:  return (m_core->curlcntr == 1);   /* LCE */
 		case 0x10:  return !(m_core->astat & AZ);     /* NOT EQUAL */
-		case 0x11:  return (m_core->astat & AZ) || !(m_core->astat & AN);   /* GE */
-		case 0x12:  return !(m_core->astat & AZ) && !(m_core->astat & AN);  /* GT */
+		case 0x11:  return !SHARC_COND_LT;            /* GE */
+		case 0x12:  return !SHARC_COND_LE;            /* GT */
 		case 0x13:  return !(m_core->astat & AC);     /* NOT AC */
 		case 0x14:  return !(m_core->astat & AV);     /* NOT AV */
 		case 0x15:  return !(m_core->astat & MV);     /* NOT MV */
