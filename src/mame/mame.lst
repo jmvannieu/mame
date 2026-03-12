@@ -16520,11 +16520,11 @@ hrclass
 tsclass
 
 @source:ces/galgames.cpp
+galgames
 galgame2
 galgame3
 galgame4
 galgame4p
-galgbios
 
 @source:chess/ave_arb.cpp
 arb
@@ -31765,6 +31765,9 @@ h01b
 nf500a
 h01jce
 
+@source:misc/haiwei.cpp
+hqdf
+
 @source:misc/hapyfish.cpp
 hapyfsh2
 
@@ -36991,6 +36994,7 @@ mspacmanbhe
 mspacmanbi
 mspacmanblt
 mspacmanblt2
+mspacmanbpl
 mspacmancr
 mspacmane
 mspacmane2
