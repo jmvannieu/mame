@@ -73,7 +73,6 @@ protected:
 	TILE_GET_INFO_MEMBER(satansat_get_fg_tile_info);
 
 	virtual void machine_start() override ATTR_COLD;
-	virtual void machine_reset() override ATTR_COLD;
 	DECLARE_VIDEO_START(snk6502);
 	DECLARE_VIDEO_START(satansat);
 
