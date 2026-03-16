@@ -162,10 +162,17 @@ Common game codes:
    (EEPROM or NAND settings area)
  - During boot hold P1 A and P2 A - Reset random numbers generator at each game start.
    Probably was used during testing or/and competition events.
+ - During boot hold P1 Right+A+B+C and P2 Left+A+B+C - Forcibly initialise non-volatile data
+   (EEPROM or NAND settings area)
+ - During boot hold P1 A and P2 A - Reset random numbers generator at each game start.
+   Probably was used during testing or/and competition events.
 
 TODO:
 
 Improve Blending precision?
+ - I'm not sure what precision the original HW mixes with, source data is 555 RGB with 1 bit
+   transparency (16-bits) and the real VRAM is also clearly in this format.  The Alpha values
+   supplied however are 8bpp, and the 'Tint' values use 0x20 for 'normal' (not 0x1f)
  - I'm not sure what precision the original HW mixes with, source data is 555 RGB with 1 bit
    transparency (16-bits) and the real VRAM is also clearly in this format.  The Alpha values
    supplied however are 8bpp, and the 'Tint' values use 0x20 for 'normal' (not 0x1f)
