@@ -37,5 +37,26 @@ jobs:
       - name: Merge and Push
         if: success()
         run: |
-          git merge ${{ env.LATEST_TAG }} --no-edit
+          git merge ${{ env.LATEST_TAG }} --no-edit -X theirs || MERGE_FAILED=true
+
+          SACRED_FILES=(
+            "src/mame/mame.lst"
+            "src/frontend/mame/ui/ui.cpp"
+            "src/mame/cave/cv1k.cpp"
+            ".github/workflows/"
+          )
+
+          if [ "$MERGE_FAILED" = true ]; then
+            for FILE in "${SACRED_FILES[@]}"; do
+              if git ls-files -u | grep -q "$FILE"; then
+                echo "!!! REAL CONFLICT IN SACRED FILE: $FILE !!!"
+                echo "Manual intervention required. Aborting workflow."
+                exit 1
+              fi
+            done
+            
+            git add .
+            git commit -m "Auto-resolved non-sacred conflicts using Upstream versions"
+          fi
+
           git push origin master --tags
