@@ -28932,6 +28932,7 @@ narc4
 narc6
 saurnfrnt
 shimpact
+shimpactl1
 shimpactp4
 shimpactp5
 shimpactp6
@@ -33008,7 +33009,7 @@ pr_wldkn
 pr_wnstk
 
 @source:misc/ps_m3.cpp
-dreamcha
+dreamhld
 
 @source:misc/psattack.cpp
 psattack
