@@ -76,8 +76,8 @@ private:
 	};
 
 	required_device<namcos21_3d_device> m_renderer;
-	required_device<cpu_device> m_c67master;
-	required_device_array<cpu_device,4> m_c67slave;
+	required_device<namco_c67_device> m_c67master;
+	required_device_array<namco_c67_device, 4> m_c67slave;
 	required_region_ptr<int32_t> m_ptrom24;
 	std::unique_ptr<uint16_t []> m_dspram16;
 
@@ -107,7 +107,7 @@ private:
 	uint16_t get_input_bytes_advertised_for_slave();
 	void render_slave_output(uint16_t data);
 
-	void namcos21_kickstart_hacks(int internal);
+	void namcos21_kickstart();
 
 	void dspcuskey_w(uint16_t data);
 	uint16_t dspcuskey_r();

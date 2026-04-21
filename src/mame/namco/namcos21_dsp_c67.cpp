@@ -1,16 +1,17 @@
 // license:BSD-3-Clause
 // copyright-holders:Phil Stroffolino, David Haywood
-
 /*
 
-Common code for the later Namco System 21 DSP board 5 TMS320C25 DSPs with custom Namco programming (marked C67) in a 1x Master, 4x Slave configuration
+Common code for the later Namco System 21 DSP board 5 TMS320C25 DSPs with custom
+Namco programming (marked C67) in a 1x Master, 4x Slave configuration
 
-used by Star Blade, Cybersled
+used by Star Blade, Solvalou, Cybersled, Air Combat
 
-TODO: handle protection properly and with callbacks
-      handle splitting of workload across slaves
-      remove hacks!
-      some of the list processing should probably be in the 3d device, split it out
+TODO:
+- handle protection properly and with callbacks
+- handle splitting of workload across slaves
+- remove hacks!
+- some of the list processing should probably be in the 3d device, split it out
 
 */
 
@@ -69,19 +70,9 @@ void namcos21_dsp_c67_device::device_reset()
 	m_poly_frame_width = m_renderer->get_width();
 	m_poly_frame_height = m_renderer->get_height();
 
-	/* DSP startup hacks */
-	m_mbNeedsKickstart = 20;
-	// looks unnecessary, also causes 3d drift on title screen
-//	if (m_gametype == NAMCOS21_CYBERSLED)
-//	{
-//		m_mbNeedsKickstart = 200;
-//	}
-
 	/* Wipe the framebuffers */
 	m_renderer->swap_and_clear_poly_framebuffer();
 	m_renderer->swap_and_clear_poly_framebuffer();
-
-	//reset_dsps(ASSERT_LINE);
 
 	m_mpDspState->masterSourceAddr = 0;
 	m_mpDspState->slaveBytesAvailable = 0;
@@ -98,6 +89,7 @@ void namcos21_dsp_c67_device::device_reset()
 	m_mPointRomMSB = 0;
 	m_mbPointRomDataAvailable = 0;
 	m_irq_enable = 0;
+	m_mbNeedsKickstart = 1;
 
 	// clear these?
 	//m_depthcue[2][0x400];
@@ -124,33 +116,43 @@ void namcos21_dsp_c67_device::reset_dsps(int state)
 void namcos21_dsp_c67_device::reset_kickstart()
 {
 	//printf( "dspkick=0x%x\n", data );
-	namcos21_kickstart_hacks(1);
+	if (m_mbNeedsKickstart == 0)
+		return;
+	m_mbNeedsKickstart = 0;
+
+	namcos21_kickstart();
 }
 
 void namcos21_dsp_c67_device::device_add_mconfig(machine_config &config)
 {
-	namco_c67_device& dspmaster(NAMCO_C67(config, m_c67master, 24000000)); /* 24 MHz? overclocked */
-	dspmaster.set_addrmap(AS_PROGRAM, &namcos21_dsp_c67_device::master_dsp_program);
-	dspmaster.set_addrmap(AS_DATA, &namcos21_dsp_c67_device::master_dsp_data);
-	dspmaster.set_addrmap(AS_IO, &namcos21_dsp_c67_device::master_dsp_io);
-	dspmaster.xf_out_cb().set(FUNC(namcos21_dsp_c67_device::dsp_xf_w));
+	NAMCO_C67(config, m_c67master, 40_MHz_XTAL);
+	m_c67master->set_addrmap(AS_PROGRAM, &namcos21_dsp_c67_device::master_dsp_program);
+	m_c67master->set_addrmap(AS_DATA, &namcos21_dsp_c67_device::master_dsp_data);
+	m_c67master->set_addrmap(AS_IO, &namcos21_dsp_c67_device::master_dsp_io);
+	m_c67master->xf_out_cb().set(FUNC(namcos21_dsp_c67_device::dsp_xf_w));
 
 	for (int i = 0; i < 4; i++)
 	{
-		namco_c67_device& dspslave(NAMCO_C67(config, m_c67slave[i], 24000000)); /* 24 MHz? overclocked */
-		dspslave.set_addrmap(AS_PROGRAM, &namcos21_dsp_c67_device::slave_dsp_program);
-		dspslave.set_addrmap(AS_DATA, &namcos21_dsp_c67_device::slave_dsp_data);
-		dspslave.set_addrmap(AS_IO, &namcos21_dsp_c67_device::slave_dsp_io);
-		dspslave.hold_in_cb().set_constant(0);
-		dspslave.hold_ack_out_cb().set_nop();
-		dspslave.xf_out_cb().set(FUNC(namcos21_dsp_c67_device::slave_XF_output_w));
+		NAMCO_C67(config, m_c67slave[i], 40_MHz_XTAL);
+		m_c67slave[i]->set_addrmap(AS_PROGRAM, &namcos21_dsp_c67_device::slave_dsp_program);
+		m_c67slave[i]->set_addrmap(AS_DATA, &namcos21_dsp_c67_device::slave_dsp_data);
+		m_c67slave[i]->set_addrmap(AS_IO, &namcos21_dsp_c67_device::slave_dsp_io);
+		m_c67slave[i]->hold_in_cb().set_constant(0);
+		m_c67slave[i]->hold_ack_out_cb().set_nop();
+		m_c67slave[i]->xf_out_cb().set(FUNC(namcos21_dsp_c67_device::slave_XF_output_w));
 
-		// the emulation currently only uses one slave DSP clocked at 4x the normal rate instead of the master splitting the workload across the 4 slaves
-		if (i!=0)
-			dspslave.set_disable();
+		// instead of the master splitting the workload across the 4 slaves, the emulation
+		// currently only uses one slave DSP clocked at 4x the normal rate
+		if (i != 0)
+			m_c67slave[i]->set_disable();
 		else
-			dspslave.set_clock(24000000*4);
+			m_c67slave[i]->set_clock(m_c67slave[i]->clock() * 4);
 	}
+
+	// underclocked for now (see TODO note in namcos21_c67 driver)
+	m_c67master->set_clock_scale(0.6);
+	for (int i = 0; i < 4; i++)
+		m_c67slave[i]->set_clock_scale(0.6);
 }
 
 
@@ -315,27 +317,8 @@ void namcos21_dsp_c67_device::transfer_dsp_data(bool first)
 
 
 
-void namcos21_dsp_c67_device::namcos21_kickstart_hacks(int internal)
+void namcos21_dsp_c67_device::namcos21_kickstart()
 {
-	/* patch dsp watchdog */
-	switch (m_gametype)
-	{
-	case namcos21_dsp_c67_device::NAMCOS21_AIRCOMBAT:
-		m_master_dsp_ram[0x008e] = 0x808f;
-		break;
-	case namcos21_dsp_c67_device::NAMCOS21_SOLVALOU:
-		m_master_dsp_ram[0x008b] = 0x808c;
-		break;
-	default:
-		break;
-	}
-	if (internal)
-	{
-		if (m_mbNeedsKickstart == 0) return;
-		m_mbNeedsKickstart--;
-		if (m_mbNeedsKickstart) return;
-	}
-
 	m_renderer->swap_and_clear_poly_framebuffer();
 	m_mpDspState->masterSourceAddr = 0;
 	m_mpDspState->slaveOutputSize = 0;
@@ -370,7 +353,7 @@ uint16_t namcos21_dsp_c67_device::get_input_bytes_advertised_for_slave()
 	}
 	else if( m_mpDspState->slaveActive && m_mpDspState->masterFinished && m_mpDspState->masterSourceAddr )
 	{
-		namcos21_kickstart_hacks(0);
+		namcos21_kickstart();
 	}
 	return m_mpDspState->slaveBytesAdvertised;
 }
