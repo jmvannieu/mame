@@ -1,5 +1,5 @@
 // license:BSD-3-Clause
-// copyright-holders:David Haywood
+// copyright-holders:Phil Stroffolino, David Haywood
 #ifndef MAME_NAMCO_NAMCOS21_DSP_C67_H
 #define MAME_NAMCO_NAMCOS21_DSP_C67_H
 
@@ -11,8 +11,6 @@
 #include <algorithm>
 #include <memory>
 
-
-#define ENABLE_LOGGING      0
 
 class namcos21_dsp_c67_device : public device_t
 {
@@ -94,11 +92,7 @@ private:
 	int m_mbPointRomDataAvailable;
 	uint8_t m_depthcue[2][0x400];
 	int m_irq_enable;
-
 	int m_mbNeedsKickstart;
-
-	int m_poly_frame_width;
-	int m_poly_frame_height;
 
 	int32_t read_pointrom_data(unsigned offset);
 	void transmit_word_to_slave(uint16_t data);
