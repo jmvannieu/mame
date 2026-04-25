@@ -37,6 +37,7 @@ shade pixels according to their depth.
 TODO:
 - polygon glitches/flicker
 - car engine sound is wrong
+- pressing service mode while the game is running causes it to lock up (need to press F3)
 - is there a video_enable flag? or at least one for the bitmap layer (see screen transitions)
 - winrungp: some missing bitmap layer gfx due to underdumps of program roms (see attract mode when
   it's supposed to show "TRIANGLE" curve text, and the congratulations screen after winning)
@@ -301,17 +302,19 @@ public:
 		m_maincpu(*this, "maincpu"),
 		m_audiocpu(*this, "audiocpu"),
 		m_slave(*this, "slave"),
+		m_gpu(*this, "gpu"),
 		m_c65(*this, "c65mcu"),
 		m_sci(*this, "sci"),
 		m_master_intc(*this, "master_intc"),
 		m_slave_intc(*this, "slave_intc"),
+		m_gpu_intc(*this, "gpu_intc"),
+		m_nvram(*this, "nvram", 0x2000, ENDIANNESS_BIG),
 		m_c140(*this, "c140"),
 		m_palette(*this, "palette"),
 		m_screen(*this, "screen"),
 		m_audiobank(*this, "audiobank"),
 		m_c140_region(*this, "c140"),
 		m_dpram(*this, "dpram"),
-		m_gpu_intc(*this, "gpu_intc"),
 		m_namcos21_3d(*this, "namcos21_3d"),
 		m_namcos21_dsp(*this, "namcos21dsp")
 	{ }
@@ -327,52 +330,52 @@ private:
 	required_device<cpu_device> m_maincpu;
 	required_device<cpu_device> m_audiocpu;
 	required_device<cpu_device> m_slave;
+	required_device<cpu_device> m_gpu;
 	required_device<namcoc65_device> m_c65;
 	required_device<namco_c139_device> m_sci;
 	required_device<namco_c148_device> m_master_intc;
 	required_device<namco_c148_device> m_slave_intc;
+	required_device<namco_c148_device> m_gpu_intc;
+	memory_share_creator<u8> m_nvram;
 	required_device<c140_device> m_c140;
 	required_device<palette_device> m_palette;
 	required_device<screen_device> m_screen;
 	required_memory_bank m_audiobank;
 	required_region_ptr<u16> m_c140_region;
-	required_shared_ptr<uint8_t> m_dpram;
-	required_device<namco_c148_device> m_gpu_intc;
+	required_shared_ptr<u8> m_dpram;
 	required_device<namcos21_3d_device> m_namcos21_3d;
 	required_device<namcos21_dsp_device> m_namcos21_dsp;
 
-	std::unique_ptr<uint8_t[]> m_gpu_videoram;
+	std::unique_ptr<u8[]> m_gpu_videoram;
 
-	uint8_t m_gpu_videoram_mask = 0;
-	uint16_t m_gpu_color = 0;
-	uint16_t m_gpu_register[0x10/2] = { };
+	u8 m_gpu_videoram_mask = 0;
+	u16 m_gpu_color = 0;
+	u16 m_gpu_register[0x10/2] = { };
 
-	uint16_t dpram_word_r(offs_t offset);
-	void dpram_word_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	uint8_t dpram_byte_r(offs_t offset);
-	void dpram_byte_w(offs_t offset, uint8_t data);
+	u16 dpram_word_r(offs_t offset);
+	void dpram_word_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	u8 dpram_byte_r(offs_t offset);
+	void dpram_byte_w(offs_t offset, u8 data);
 
-	uint16_t gpu_color_r();
-	void gpu_color_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	uint16_t gpu_register_r(offs_t offset);
-	void gpu_register_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	void gpu_videoram_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
-	uint16_t gpu_videoram_r(offs_t offset);
+	u16 gpu_color_r();
+	void gpu_color_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	u16 gpu_register_r(offs_t offset);
+	void gpu_register_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	void gpu_videoram_w(offs_t offset, u16 data, u16 mem_mask = ~0);
+	u16 gpu_videoram_r(offs_t offset);
 
-	void eeprom_w(offs_t offset, uint8_t data);
-	uint8_t eeprom_r(offs_t offset);
+	void nvram_w(offs_t offset, u8 data) { m_nvram[offset] = data; }
+	u8 nvram_r(offs_t offset) { return m_nvram[offset]; }
 
-	void sound_bankselect_w(uint8_t data);
+	void sound_bankselect_w(u8 data);
 
-	void sound_reset_w(uint8_t data);
-	void system_reset_w(uint8_t data);
+	void sound_reset_w(u8 data);
+	void system_reset_w(u8 data);
 	void reset_all_subcpus(int state);
-
-	std::unique_ptr<uint8_t[]> m_eeprom;
 
 	TIMER_DEVICE_CALLBACK_MEMBER(screen_scanline);
 
-	uint32_t screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
+	u32 screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect);
 
 	void bitmap_draw(bitmap_ind16 &bitmap, const rectangle &cliprect);
 
@@ -386,36 +389,36 @@ private:
 
 void namcos21_state::video_start()
 {
-	m_gpu_videoram = make_unique_clear<uint8_t[]>(0x80000);
+	m_gpu_videoram = make_unique_clear<u8[]>(0x80000);
 	save_pointer(NAME(m_gpu_videoram), 0x80000);
 }
 
-uint16_t namcos21_state::gpu_color_r()
+u16 namcos21_state::gpu_color_r()
 {
 	return m_gpu_color;
 }
 
-void namcos21_state::gpu_color_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+void namcos21_state::gpu_color_w(offs_t offset, u16 data, u16 mem_mask)
 {
 	COMBINE_DATA(&m_gpu_color);
 }
 
-uint16_t namcos21_state::gpu_register_r(offs_t offset)
+u16 namcos21_state::gpu_register_r(offs_t offset)
 {
 	return m_gpu_register[offset];
 }
 
-void namcos21_state::gpu_register_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+void namcos21_state::gpu_register_w(offs_t offset, u16 data, u16 mem_mask)
 {
 	m_screen->update_partial(m_screen->vpos());
 	COMBINE_DATA(&m_gpu_register[offset]);
 }
 
-void namcos21_state::gpu_videoram_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+void namcos21_state::gpu_videoram_w(offs_t offset, u16 data, u16 mem_mask)
 {
 	// it always does word access
 	m_gpu_videoram_mask = data & 0xff;
-	uint8_t color = data >> 8;
+	u8 color = data >> 8;
 
 	for (int i = 0; i < 8; i++)
 	{
@@ -424,7 +427,7 @@ void namcos21_state::gpu_videoram_w(offs_t offset, uint16_t data, uint16_t mem_m
 	}
 }
 
-uint16_t namcos21_state::gpu_videoram_r(offs_t offset)
+u16 namcos21_state::gpu_videoram_r(offs_t offset)
 {
 	return (m_gpu_videoram[offset] << 8) | m_gpu_videoram_mask;
 }
@@ -439,14 +442,14 @@ void namcos21_state::bitmap_draw(bitmap_ind16 &bitmap, const rectangle &cliprect
 	printf("| %04x\n", m_gpu_color);
 #endif
 
-	int const yscroll = -cliprect.top() + (int16_t)m_gpu_register[1];
+	int const yscroll = -cliprect.top() + (s16)m_gpu_register[1];
 	int const xscroll = m_gpu_register[0] & 0xff;
 	int const base = 0x1000 | (m_gpu_color << 8 & 0xf00);
 
 	for (int sy = cliprect.top(); sy <= cliprect.bottom(); sy++)
 	{
-		uint8_t const *const pSource = &m_gpu_videoram[((yscroll + sy) & 0x3ff) * 0x200];
-		uint16_t *const pDest = &bitmap.pix(sy);
+		u8 const *const pSource = &m_gpu_videoram[((yscroll + sy) & 0x3ff) * 0x200];
+		u16 *const pDest = &bitmap.pix(sy);
 		for (int sx = cliprect.left(); sx <= cliprect.right(); sx++)
 		{
 			int const pen = pSource[(sx + xscroll) & 0x1ff];
@@ -479,7 +482,7 @@ void namcos21_state::bitmap_draw(bitmap_ind16 &bitmap, const rectangle &cliprect
 }
 
 
-uint32_t namcos21_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
+u32 namcos21_state::screen_update(screen_device &screen, bitmap_ind16 &bitmap, const rectangle &cliprect)
 {
 	bitmap.fill((m_gpu_color << 8 & 0xf00) | 0xff, cliprect);
 
@@ -510,23 +513,23 @@ uint32_t namcos21_state::screen_update(screen_device &screen, bitmap_ind16 &bitm
 
 // dual port ram memory handlers
 
-uint16_t namcos21_state::dpram_word_r(offs_t offset)
+u16 namcos21_state::dpram_word_r(offs_t offset)
 {
 	return m_dpram[offset];
 }
 
-void namcos21_state::dpram_word_w(offs_t offset, uint16_t data, uint16_t mem_mask)
+void namcos21_state::dpram_word_w(offs_t offset, u16 data, u16 mem_mask)
 {
 	if (ACCESSING_BITS_0_7)
 		m_dpram[offset] = data & 0xff;
 }
 
-uint8_t namcos21_state::dpram_byte_r(offs_t offset)
+u8 namcos21_state::dpram_byte_r(offs_t offset)
 {
 	return m_dpram[offset];
 }
 
-void namcos21_state::dpram_byte_w(offs_t offset, uint8_t data)
+void namcos21_state::dpram_byte_w(offs_t offset, u8 data)
 {
 	m_dpram[offset] = data;
 }
@@ -537,7 +540,7 @@ void namcos21_state::master_map(address_map &map)
 {
 	map(0x000000, 0x03ffff).rom();
 	map(0x100000, 0x10ffff).ram(); // work RAM
-	map(0x180000, 0x183fff).rw(FUNC(namcos21_state::eeprom_r), FUNC(namcos21_state::eeprom_w)).umask16(0x00ff);
+	map(0x180000, 0x183fff).rw(FUNC(namcos21_state::nvram_r), FUNC(namcos21_state::nvram_w)).umask16(0x00ff);
 	map(0x1c0000, 0x1fffff).m(m_master_intc, FUNC(namco_c148_device::map));
 
 	// DSP Related
@@ -657,9 +660,9 @@ static INPUT_PORTS_START( winrun )
 	PORT_BIT( 0x01, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x02, IP_ACTIVE_LOW, IPT_UNUSED )
 	PORT_BIT( 0x04, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_NAME("Shift Down")
+	PORT_BIT( 0x08, IP_ACTIVE_LOW, IPT_JOYSTICK_UP ) PORT_NAME("Shift Down")
 	PORT_BIT( 0x10, IP_ACTIVE_LOW, IPT_UNUSED )
-	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_JOYSTICK_UP   ) PORT_NAME("Shift Up")
+	PORT_BIT( 0x20, IP_ACTIVE_LOW, IPT_JOYSTICK_DOWN ) PORT_NAME("Shift Up")
 	PORT_BIT( 0xc0, IP_ACTIVE_LOW, IPT_UNUSED )
 
 	PORT_START("DSW")       /* 63B05Z0 - $2000 DIP SW */
@@ -705,12 +708,12 @@ static INPUT_PORTS_START( winrungp )
 	PORT_DIPSETTING(    0x00, "4M" )
 INPUT_PORTS_END
 
-void namcos21_state::sound_bankselect_w(uint8_t data)
+void namcos21_state::sound_bankselect_w(u8 data)
 {
 	m_audiobank->set_entry(data >> 4);
 }
 
-void namcos21_state::sound_reset_w(uint8_t data)
+void namcos21_state::sound_reset_w(u8 data)
 {
 	if (data & 0x01)
 	{
@@ -724,7 +727,7 @@ void namcos21_state::sound_reset_w(uint8_t data)
 	}
 }
 
-void namcos21_state::system_reset_w(uint8_t data)
+void namcos21_state::system_reset_w(u8 data)
 {
 	reset_all_subcpus(data & 1 ? CLEAR_LINE : ASSERT_LINE);
 }
@@ -735,35 +738,20 @@ void namcos21_state::reset_all_subcpus(int state)
 	m_c65->ext_reset(state);
 }
 
-void namcos21_state::eeprom_w(offs_t offset, uint8_t data)
-{
-	m_eeprom[offset] = data;
-}
-
-uint8_t namcos21_state::eeprom_r(offs_t offset)
-{
-	return m_eeprom[offset];
-}
-
 void namcos21_state::machine_reset()
 {
 	// Initialise the bank select in the sound CPU
 	m_audiobank->set_entry(0); // Page in bank 0
 
-	m_audiocpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE );
+	m_audiocpu->set_input_line(INPUT_LINE_RESET, ASSERT_LINE);
 
 	// Place CPU2 & CPU3 into the reset condition
 	reset_all_subcpus(ASSERT_LINE);
 }
 
-
-
 void namcos21_state::machine_start()
 {
-	m_eeprom = std::make_unique<uint8_t[]>(0x2000);
-	subdevice<nvram_device>("nvram")->set_base(m_eeprom.get(), 0x2000);
-
-	uint32_t max = memregion("audiocpu")->bytes() / 0x4000;
+	u32 max = memregion("audiocpu")->bytes() / 0x4000;
 	for (int i = 0; i < 0x10; i++)
 		m_audiobank->configure_entry(i, memregion("audiocpu")->base() + (i % max) * 0x4000);
 
@@ -824,8 +812,8 @@ void namcos21_state::winrun(machine_config &config)
 	NAMCOS21_DSP(config, m_namcos21_dsp, 0);
 	m_namcos21_dsp->set_renderer_tag("namcos21_3d");
 
-	m68000_device &gpu(M68000(config, "gpu", 49.152_MHz_XTAL / 4)); // graphics coprocessor
-	gpu.set_addrmap(AS_PROGRAM, &namcos21_state::gpu_map);
+	M68000(config, m_gpu, 49.152_MHz_XTAL / 4); // graphics coprocessor
+	m_gpu->set_addrmap(AS_PROGRAM, &namcos21_state::gpu_map);
 
 	NAMCO_C148(config, m_master_intc, 0, m_maincpu, true);
 	m_master_intc->link_c148_device(m_slave_intc);
@@ -835,7 +823,7 @@ void namcos21_state::winrun(machine_config &config)
 	NAMCO_C148(config, m_slave_intc, 0, m_slave, false);
 	m_slave_intc->link_c148_device(m_master_intc);
 
-	NAMCO_C148(config, m_gpu_intc, 0, "gpu", false);
+	NAMCO_C148(config, m_gpu_intc, 0, m_gpu, false);
 	NAMCO_C139(config, m_sci, 0);
 
 	config.set_maximum_quantum(attotime::from_hz(6000)); // 100 CPU slices per frame
@@ -975,8 +963,8 @@ ROM_START( winrungp )
 	ROM_LOAD16_BYTE( "sg1-pt1-l.8e", 0x40001, 0x20000, CRC(6385e325) SHA1(d50bceb2e9c0d0a38d7b0f918f99c482649e260d) )
 
 	ROM_REGION16_BE( 0x400000, "c140", ROMREGION_ERASE00 ) /* sound samples */
-	ROM_LOAD16_BYTE("sg-voi-1.11c", 0x100000, 0x80000,CRC(7dcccb31) SHA1(4441b37691434b13eae5dee2d04dc12a56b04d2a) )
-	ROM_LOAD16_BYTE("sg-voi-3.11e", 0x300000, 0x80000,CRC(a198141c) SHA1(b4ca352e6aedd9d7a7e5e39e840f1d3a7145900e) )
+	ROM_LOAD16_BYTE("sg-voi-1.11c", 0x100000, 0x80000, CRC(7dcccb31) SHA1(4441b37691434b13eae5dee2d04dc12a56b04d2a) )
+	ROM_LOAD16_BYTE("sg-voi-3.11e", 0x300000, 0x80000, CRC(a198141c) SHA1(b4ca352e6aedd9d7a7e5e39e840f1d3a7145900e) )
 
 	ROM_REGION( 0x2000, "nvram", 0 ) /* default settings, including calibration */
 	ROM_LOAD( "nvram", 0x0000, 0x2000, CRC(93cca84c) SHA1(e39510d9f066266a77780662a6d991c3dd0348d1) )
@@ -1022,8 +1010,8 @@ ROM_START( winrun91 )
 	ROM_LOAD16_BYTE( "r911-pt1l.8e", 0x40001, 0x20000, CRC(38a54ec5) SHA1(5c6017c98cae674868153ff2d64532027cf0ab83) )
 
 	ROM_REGION16_BE( 0x400000, "c140", ROMREGION_ERASE00 ) /* sound samples */
-	ROM_LOAD16_BYTE("r911-avo1.11c", 0x100000, 0x80000,CRC(9fb33af3) SHA1(666630a8e5766ca4c3275961963c3e713dfdda2d) )
-	ROM_LOAD16_BYTE("r911-avo3.11e", 0x300000, 0x80000,CRC(76e22f92) SHA1(0e1b8d35a5b9c20cc3192d935f0c9da1e69679d2) )
+	ROM_LOAD16_BYTE("r911-avo1.11c", 0x100000, 0x80000, CRC(9fb33af3) SHA1(666630a8e5766ca4c3275961963c3e713dfdda2d) )
+	ROM_LOAD16_BYTE("r911-avo3.11e", 0x300000, 0x80000, CRC(76e22f92) SHA1(0e1b8d35a5b9c20cc3192d935f0c9da1e69679d2) )
 
 	ROM_REGION( 0x2000, "nvram", 0 ) /* default settings, including calibration */
 	ROM_LOAD( "nvram", 0x0000, 0x2000, CRC(75bcbc22) SHA1(1e7e785735d27aa8cd8393b16b589a46ecd7956a) )
