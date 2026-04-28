@@ -113,6 +113,7 @@ TODO:
   having one per background layer, due to the line effects. Would also need to
   support all of the logic relating to alpha table blending, row and column
   scroll/zoom etc.
+* Single leftmost pixel column is invisible at most case in soldivid
 */
 
 #include "emu.h"
@@ -429,6 +430,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 								u16 *pri = &m_z_bitmap.pix(sy, sx);
 								int const src_modulo = yinc * gfx->rowbytes() - xinc * (ex - sx);
 								int const dst_modulo = dest_bmp.rowpixels() - (ex - sx);
+								int const pri_modulo = m_z_bitmap.rowpixels() - (ex - sx);
 
 								for (int y = sy; y < ey; y++)
 								{
@@ -440,7 +442,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 										source += xinc;
 									}
 									dest += dst_modulo;
-									pri += dst_modulo;
+									pri += pri_modulo;
 									source += src_modulo;
 								}
 							}
@@ -475,6 +477,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 								u16 *pri = &m_z_bitmap.pix(sy, sx);
 								int const src_modulo = yinc * gfx->rowbytes() - xinc * (ex - sx);
 								int const dst_modulo = dest_bmp.rowpixels() - (ex - sx);
+								int const pri_modulo = m_z_bitmap.rowpixels() - (ex - sx);
 
 								for (int y = sy; y < ey; y++)
 								{
@@ -486,7 +489,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 										source += xinc;
 									}
 									dest += dst_modulo;
-									pri += dst_modulo;
+									pri += pri_modulo;
 									source += src_modulo;
 								}
 							}
@@ -521,6 +524,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 								u16 *pri = &m_z_bitmap.pix(sy, sx);
 								int const src_modulo = yinc * gfx->rowbytes() - xinc * (ex - sx);
 								int const dst_modulo = dest_bmp.rowpixels() - (ex - sx);
+								int const pri_modulo = m_z_bitmap.rowpixels() - (ex - sx);
 
 								for (int y = sy; y < ey; y++)
 								{
@@ -532,7 +536,7 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 										source += xinc;
 									}
 									dest += dst_modulo;
-									pri += dst_modulo;
+									pri += pri_modulo;
 									source += src_modulo;
 								}
 							}
@@ -630,13 +634,13 @@ void psikyosh_state::drawgfxzoom(bitmap_rgb32 &dest_bmp, const rectangle &clip, 
 				if (ex > myclip.right() + 1)
 				{
 					// clip right
-					int const pixels = ex-myclip.right() - 1;
+					int const pixels = ex - myclip.right() - 1;
 					ex -= pixels;
 				}
 				if (ey > myclip.bottom() + 1)
 				{
 					// clip bottom
-					int const pixels = ey-myclip.bottom() - 1;
+					int const pixels = ey - myclip.bottom() - 1;
 					ey -= pixels;
 				}
 
@@ -827,9 +831,9 @@ void psikyosh_state::get_sprites()
 		sprite_ptr->high    = ((m_spriteram[sprnum + 1] & 0x0f000000) >> 24) + 1;
 		sprite_ptr->wide    = ((m_spriteram[sprnum + 1] & 0x00000f00) >> 8) + 1;
 
-		sprite_ptr->flpy    = BIT(m_spriteram[sprnum + 1], 31) >> 31;
+		sprite_ptr->flpy    = BIT(m_spriteram[sprnum + 1], 31);
 		sprite_ptr->spr_pri = (m_spriteram[sprnum + 1] & 0x30000000) >> 28;
-		sprite_ptr->flpx    = BIT(m_spriteram[sprnum + 1], 15) >> 15;
+		sprite_ptr->flpx    = BIT(m_spriteram[sprnum + 1], 15);
 		sprite_ptr->bg_pri  = (m_spriteram[sprnum + 1] & 0x00003000) >> 12;
 
 		sprite_ptr->zoomy   = (m_spriteram[sprnum + 1] & 0x00ff0000) >> 16;
