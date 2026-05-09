@@ -8,7 +8,7 @@ Main components:
 TMP68HC000-P16 CPU
 2x CY7C199-15PC RAM (near CPU)
 32.000 MHz XTAL (near CPU)
-ES9402LA (rebranded TC0090LVC?)
+ES9402LA (same label as the one in lastbank.cpp but actually Imagetek VDP I4220)
 3x CY7C199-15PC RAM (near ES9402LA)
 26.666 MHz XTAL (near ES9402LA)
 Altera EPM7032LC44-15T CPLD
@@ -28,8 +28,9 @@ TODO:
 - Whatever the stealth mode is supposed to do, if anything at all.
   Reads inputs but does nothing with them except throwing a "COIN ERROR" (???)
 - Hopper;
-- Locate "Service B35" pin (for hopper testing);
-- Boots with "Cadence Technology" if EEPROM initialized from test mode, is it possible to make it init as Excellent System mode?
+- Locate "Service B35" pin (for hopper testing) update: seems not really coded?
+- Boots with "Cadence Technology" if EEPROM initialized from test mode,
+  is it possible to make it init as Excellent System mode?
 
 */
 
@@ -37,8 +38,8 @@ TODO:
 
 #include "cpu/m68000/m68000.h"
 #include "machine/eepromser.h"
-//#include "machine/nvram.h"
-//#include "machine/ticket.h"
+#include "machine/nvram.h"
+#include "machine/ticket.h"
 //#include "machine/timer.h"
 #include "machine/watchdog.h"
 #include "sound/ymz280b.h"
@@ -59,6 +60,7 @@ public:
 		: driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_eeprom(*this, "eeprom"),
+		m_hopper(*this,"hopper"),
 		m_watchdog(*this, "watchdog"),
 		m_screen(*this, "screen"),
 		m_vdp2(*this, "vdp2")
@@ -71,34 +73,59 @@ protected:
 private:
 	required_device<cpu_device> m_maincpu;
 	required_device<eeprom_serial_93cxx_device> m_eeprom;
+	required_device<ticket_dispenser_device> m_hopper;
 	required_device<watchdog_timer_device> m_watchdog;
 	required_device<screen_device> m_screen;
 	required_device<imagetek_i4220_device> m_vdp2;
 
-	void eeprom_w(uint16_t data);
-	void watchdog_w(uint16_t data);
+	void eeprom_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
+	void watchdog_w(offs_t offset, uint16_t data, uint16_t mem_mask = ~0);
 
 	void program_map(address_map &map) ATTR_COLD;
 };
 
-
-void es9606_state::eeprom_w(uint16_t data)
+void es9606_state::eeprom_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
-	if (data & 0xff1f)
+	// bit 15: unknown, verbose
+	if (data & 0x701f)
 		logerror("%s unknown eeprom_w bits written %04x\n", machine().describe_context(), data);
 
-	m_eeprom->cs_write(BIT(data, 5) ? ASSERT_LINE : CLEAR_LINE);
-	m_eeprom->clk_write(BIT(data, 6) ? ASSERT_LINE : CLEAR_LINE);
-	m_eeprom->di_write(BIT(data, 7));
+	if (ACCESSING_BITS_0_7)
+	{
+		m_eeprom->cs_write(BIT(data, 5) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->clk_write(BIT(data, 6) ? ASSERT_LINE : CLEAR_LINE);
+		m_eeprom->di_write(BIT(data, 7));
+	}
+
+	if (ACCESSING_BITS_8_15)
+	{
+		machine().bookkeeping().coin_counter_w(0, BIT(data, 8));
+		machine().bookkeeping().coin_counter_w(1, BIT(data, 9));
+		machine().bookkeeping().coin_counter_w(2, BIT(data, 10));
+		machine().bookkeeping().coin_counter_w(3, BIT(data, 11)); // key in
+		m_hopper->motor_w(BIT(data, 12));
+	}
 }
 
-void es9606_state::watchdog_w(uint16_t data)
+// lamps
+// x--- ---- Key Out lamp?
+// -x-- ---- Gamble High
+// --x- ---- Take Score
+// ---x ---- Double Up
+// ---- x--- Bet
+// ---- -x-- Gamble Low
+// ---- --x- Start
+// ---- ---x high in test mode, coin lockout?
+void es9606_state::watchdog_w(offs_t offset, uint16_t data, uint16_t mem_mask)
 {
-	if (data & 0x7fff)
+	if (data & 0x7f01)
 		logerror("%s unknown watchdog_w bits written %04x\n", machine().describe_context(), data);
 
-	if (BIT(data, 15))
-		m_watchdog->reset_w();
+	if (ACCESSING_BITS_8_15)
+	{
+		if (BIT(data, 15))
+			m_watchdog->reset_w();
+	}
 }
 
 
@@ -108,19 +135,19 @@ void es9606_state::program_map(address_map &map)
 
 	map(0x000000, 0x0fffff).rom();
 	map(0x100000, 0x17ffff).m(m_vdp2, FUNC(imagetek_i4220_device::v2_map));
-	map(0x400000, 0x400003).rw("ymz", FUNC(ymz280b_device::read), FUNC(ymz280b_device::write)).umask16(0x00ff);
+	map(0x400000, 0x400003).mirror(0x00000c).rw("ymz", FUNC(ymz280b_device::read), FUNC(ymz280b_device::write)).umask16(0x00ff); // r/w mirror if reset from win screen
 	map(0x600000, 0x600001).portr("IN0").w(FUNC(es9606_state::eeprom_w));
 	map(0x600002, 0x600003).portr("IN1").w(FUNC(es9606_state::watchdog_w));
 	map(0x600004, 0x600005).portr("DSW");
 	map(0x600006, 0x600007).portr("IN3");
-	map(0xff0000, 0xffffff).ram(); // NVRAM
+	map(0xf00000, 0xf0ffff).mirror(0x0f0000).ram().share("nvram"); // dword access at $fef172 on win screen, assume same mirror as vmetal
 }
 
 
 static INPUT_PORTS_START( keirind2 )
 	PORT_START("IN0")
 	PORT_BIT( 0x0001, IP_ACTIVE_LOW, IPT_START1 )
-	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_GAMBLE_LOW ) // left cursor
+	PORT_BIT( 0x0002, IP_ACTIVE_LOW, IPT_GAMBLE_LOW ) // left cursor / red for D_UP sexy
 	PORT_BIT( 0x0004, IP_ACTIVE_LOW, IPT_GAMBLE_BET )
 	PORT_BIT( 0x0008, IP_ACTIVE_LOW, IPT_POKER_CANCEL ) PORT_NAME("Cancel / Take Score")
 	PORT_BIT( 0x0010, IP_ACTIVE_LOW, IPT_GAMBLE_D_UP ) PORT_NAME("Double Up / Bet All")
@@ -130,19 +157,19 @@ static INPUT_PORTS_START( keirind2 )
 	PORT_DIPNAME( 0x40, 0x40, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x40, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x00, DEF_STR( On ) )
-	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_GAMBLE_HIGH ) // right cursor
+	PORT_BIT( 0x0080, IP_ACTIVE_LOW, IPT_GAMBLE_HIGH ) // right cursor / white for D_UP sexy
 	PORT_DIPNAME( 0x0100, 0x0100, "IN0-1" )
 	PORT_DIPSETTING(    0x0100, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
 	PORT_BIT( 0x0200, IP_ACTIVE_LOW, IPT_COIN1 )
 	PORT_BIT( 0x0400, IP_ACTIVE_LOW, IPT_COIN2 )
-	PORT_BIT( 0x0800, IP_ACTIVE_LOW, IPT_GAMBLE_BOOK ) // Analyzer
-	PORT_BIT( 0x1000, IP_ACTIVE_LOW, IPT_OTHER ) // Hopper Empty
+	PORT_BIT( 0x0800, IP_ACTIVE_LOW, IPT_GAMBLE_BOOK ) PORT_CODE(KEYCODE_8) // Analyzer
+	PORT_BIT( 0x1000, IP_ACTIVE_LOW, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("hopper", FUNC(ticket_dispenser_device::line_r))
 	PORT_BIT( 0x2000, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Service A22")
 	PORT_DIPNAME( 0x4000, 0x4000, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x4000, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
-	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_MEMORY_RESET )
+	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_MEMORY_RESET ) // Service B35 according to sound test, however doesn't work for main test menu?
 
 	PORT_START("IN1")
 	PORT_DIPNAME( 0x01, 0x01, "IN1" )
@@ -174,13 +201,13 @@ static INPUT_PORTS_START( keirind2 )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
 	PORT_BIT( 0x0200, IP_ACTIVE_LOW, IPT_GAMBLE_KEYIN )
 	PORT_BIT( 0x0400, IP_ACTIVE_LOW, IPT_COIN3 ) // doesn't have an assigned SFX sample, why?
-	PORT_BIT( 0x0800, IP_ACTIVE_LOW, IPT_SERVICE1 ) PORT_NAME("Settings Menu")
+	PORT_BIT( 0x0800, IP_ACTIVE_LOW, IPT_SERVICE2 ) PORT_NAME("Settings Menu")
 	PORT_BIT( 0x1000, IP_ACTIVE_LOW, IPT_GAMBLE_KEYOUT )
 	PORT_BIT( 0x2000, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Service B22")
 	PORT_DIPNAME( 0x4000, 0x4000, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x4000, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
-	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_OTHER ) PORT_NAME("Service A35")
+	PORT_BIT( 0x8000, IP_ACTIVE_LOW, IPT_SERVICE1 ) PORT_NAME("Service A35") // adds service coins in-game
 
 	PORT_START("DSW")
 	PORT_DIPNAME( 0x03, 0x03, "Control Panel") PORT_DIPLOCATION("SW1:1,2")
@@ -244,7 +271,9 @@ static INPUT_PORTS_START( keirind2 )
 	PORT_DIPNAME( 0x2000, 0x2000, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x2000, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
-	PORT_DIPNAME( 0x4000, 0x4000, DEF_STR( Unknown ) ) // enables debug counters during races
+	// enables debug counters during races, first two looks 1st and 2nd position minus 1
+	// i.e. (0004 0003 -> 5 wins 4 gets 2nd -> 4-5)
+	PORT_DIPNAME( 0x4000, 0x4000, DEF_STR( Unknown ) )
 	PORT_DIPSETTING(    0x4000, DEF_STR( Off ) )
 	PORT_DIPSETTING(    0x0000, DEF_STR( On ) )
 	PORT_BIT( 0x8000, IP_ACTIVE_HIGH, IPT_CUSTOM ) PORT_READ_LINE_DEVICE_MEMBER("eeprom", FUNC(eeprom_serial_93cxx_device::do_read))
@@ -258,16 +287,27 @@ void es9606_state::es9606(machine_config &config)
 
 	EEPROM_93C46_16BIT(config, m_eeprom); // exact model unknown
 
+	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
+
+	// hand-tuned timing
+	TICKET_DISPENSER(config, m_hopper, attotime::from_msec(100));
+
 	WATCHDOG_TIMER(config, m_watchdog).set_time(attotime::from_msec(1000));
 
-	// TODO: copied verbatim from vmetal config, unverified
 	I4220(config, m_vdp2, 26.666_MHz_XTAL);
 	m_vdp2->irq_cb().set_inputline(m_maincpu, M68K_IRQ_1);
 
 	m_vdp2->set_vblank_irq_level(0);
+	// blitter irq unused by the game, assume same config as vmetal
 	m_vdp2->set_blit_irq_level(2);
 
+	m_vdp2->set_tmap_xoffsets(0,0,0);
+	m_vdp2->set_tmap_yoffsets(0,0,0);
+	m_vdp2->set_tmap_flip_xoffsets(72,72,72);
+	m_vdp2->set_tmap_flip_yoffsets(39,39,39);
+
 	SCREEN(config, m_screen, SCREEN_TYPE_RASTER);
+	// TODO: copied verbatim from vmetal config, unverified
 	m_screen->set_refresh_hz(58.2328); // VSync 58.2328Hz, HSync 15.32kHz
 	m_screen->set_vblank_time(ATTOSECONDS_IN_USEC(1500));
 	m_screen->set_size(392, 263);
@@ -282,7 +322,8 @@ void es9606_state::es9606(machine_config &config)
 
 	SPEAKER(config, "speaker", 2).front();
 
-	ymz280b_device &ymz(YMZ280B(config, "ymz", 32_MHz_XTAL / 2)); // TODO: is this the correct XTAL?
+	// Unverified clock, sounds reasonable
+	ymz280b_device &ymz(YMZ280B(config, "ymz", 32_MHz_XTAL / 2));
 	ymz.add_route(0, "speaker", 1.0, 0);
 	ymz.add_route(1, "speaker", 1.0, 1);
 }
