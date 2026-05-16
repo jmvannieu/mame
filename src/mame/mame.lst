@@ -40375,8 +40375,22 @@ psion3mx
 psion3mx_fr
 psion3mx_nl
 
-@source:psion/psion5.cpp
+@source:psion/psion5mx.cpp
+mako
+mc218
+mc218_de
+mc218_fr
 psion5mx
+psion5mx_fr
+psion5mxp
+psion5mxp_de
+revo
+revo_de
+revo_fr
+
+@source:psion/psion7.cpp
+netbook
+psion7
 
 @source:psion/psionhc.cpp
 psionhc100
@@ -40386,6 +40400,7 @@ psionhc120
 @source:psion/siena.cpp
 siena
 siena_fr
+siena_us
 
 @source:psion/workabout.cpp
 psionwa
