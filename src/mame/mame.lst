@@ -20342,6 +20342,7 @@ mmarvin
 mmerlin
 monkeysee
 mrmusical
+mt2090
 palmf31
 palmmd8
 pbmastm
@@ -21543,6 +21544,7 @@ tshs
 tshs101
 tswxp
 xypdk
+xyxcxysj
 zhongguo
 
 @source:igs/igs_m027_023vid.cpp
@@ -35487,6 +35489,9 @@ exp85
 
 @source:newcrest/chess2001.cpp
 ch2001
+
+@source:newcrest/chess3008.cpp
+ch3008
 
 @source:newcrest/computachess.cpp
 scpchess
