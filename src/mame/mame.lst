@@ -22778,6 +22778,9 @@ basic52
 a486ap4
 entrada
 
+@source:intel/i430lx.cpp
+ga586ip
+
 @source:intel/imds2.cpp
 imds2
 
@@ -45065,6 +45068,7 @@ victor6a
 victor6b
 
 @source:subsino/subsino_kr_h8.cpp
+coolbi
 modcart
 
 @source:subsino/subsino2.cpp
