@@ -41877,6 +41877,7 @@ abcopd
 abcopj
 abcopjd
 aburner
+aburner131
 aburner2
 aburner2g
 gprider
@@ -47279,6 +47280,10 @@ pasopia
 pasopia7
 pasopia7lcd
 
+@source:toshiba/t250.cpp
+t200
+t250
+
 @source:trainer/amico2k.cpp
 amico2k
 
@@ -47690,6 +47695,7 @@ sstarkar
 
 @source:tvgames/spg29x.cpp
 bratzlfe
+gameclik
 hyprscan
 jak_bbh
 jak_bbsf
@@ -47838,6 +47844,7 @@ jak_xmenp
 jak_capc
 jak_care
 jak_dbz
+jak_dbza
 jak_disf
 jak_disn
 jak_dora
@@ -47875,10 +47882,11 @@ tvtchsb
 arcade3d
 cybrtvbb
 cybrtvfe
-lexizeus
-lexiseal
 discpal
 disppal
+lexiseal
+lexizeus
+pokermor
 vgcaplet
 vgcap35
 vsplus
@@ -49396,6 +49404,7 @@ notetakr
 
 @source:xerox/xerox820.cpp
 bigboard
+bigboard5
 mk82
 mk83
 mojmikro
