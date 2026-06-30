@@ -6,6 +6,9 @@
 
     Common PowerPC definitions and functions
 
+    TODO: Separate out true common stuff from DRC-specific so it's actually
+          possible to have an interpreter.
+
 ***************************************************************************/
 
 #include "emu.h"
@@ -41,7 +44,7 @@ static constexpr uint64_t DOUBLE_EXP  = 0x7ff0000000000000U;
 static constexpr uint64_t DOUBLE_FRAC = 0x000fffffffffffffU;
 static constexpr uint64_t DOUBLE_ZERO = 0;
 
-
+static constexpr uint32_t CODEPAGE_SIZE = 0x1'0000'0000ULL / 4096 / 8;
 
 /***************************************************************************
     PRIVATE GLOBAL VARIABLES
@@ -553,10 +556,13 @@ static inline int is_snan_double(double x)
 
 void ppc_device::device_start()
 {
-	/* allocate the core from the near cache */
+	// allocate the core from the near cache
 	m_cache.allocate_cache(mconfig().options().drc_rwx());
 	m_core = m_cache.alloc_near<internal_ppc_state>();
 	memset(m_core, 0, sizeof(internal_ppc_state));
+
+	// init bitmap of which logical pages have compiled code
+	m_codepage_bits.assign(CODEPAGE_SIZE, 0);    // 0x1'0000'0000 / 4096 = 0x10'0000
 
 	m_entry = nullptr;
 	m_nocode = nullptr;
@@ -800,6 +806,9 @@ void ppc_device::device_start()
 
 	save_item(NAME(m_core->reserve));
 	save_item(NAME(m_core->reserve_address));
+
+	save_item(NAME(m_core->m_codepage_any));
+	save_pointer(NAME(&m_codepage_bits[0]), CODEPAGE_SIZE);
 
 	// Register debugger state
 	state_add(PPC_PC,    "PC", m_core->pc).formatstr("%08X");
@@ -1242,6 +1251,9 @@ void ppc_device::device_reset()
 	/* clear interrupts */
 	m_core->irq_pending = 0;
 
+	// clear the "any page has code" flag
+	m_core->m_codepage_any = 0;
+
 	/* flush the TLB */
 	if (m_cap & PPCCAP_603_MMU)
 	{
@@ -1559,6 +1571,9 @@ void ppc_device::ppccom_get_dsisr()
 void ppc_device::ppccom_execute_tlbie()
 {
 	vtlb_flush_address(m_core->param0);
+
+	// look up if this page contains a compiled code block
+	m_core->param1 = code_page_has_code(m_core->param0);
 }
 
 
