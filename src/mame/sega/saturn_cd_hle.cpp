@@ -31,7 +31,8 @@ TODO:
 - fix startup, cfr. cdblock branch;
 - merge common components with lle version via superclass (i.e. comms);
 - derive MPEG commands in a subdevice;
-- startup with NODISC currently glitches out after splash screen;
+- startup with NODISC/OPEN states currently takes a bit too much wall clock time
+  (should be rather instant not take ~14 seconds);
 
 DASM notes:
 * whizzj:
@@ -260,6 +261,7 @@ void saturn_cd_hle_device::device_reset()
  * Block interface
  */
 
+// base 0x05800000
 void saturn_cd_hle_device::amap(address_map &map)
 {
 	map(0x18000, 0x18003).rw(FUNC(saturn_cd_hle_device::datatrns_r), FUNC(saturn_cd_hle_device::datatrns_w));
@@ -275,7 +277,7 @@ void saturn_cd_hle_device::amap(address_map &map)
 	// NetLink access
 	// dragndrm expects this value, most likely for status
 	// TODO: move out of here
-	map(0x8502a, 0x8502a).lr8(NAME([] () -> u8 { return 0x11; }));
+	map(0x85029, 0x85029).lr8(NAME([] () -> u8 { return 0x11; }));
 }
 
 u32 saturn_cd_hle_device::datatrns_r(offs_t offset, uint32_t mem_mask)
@@ -616,18 +618,18 @@ int saturn_cd_hle_device::get_track_index(uint32_t fad)
 
 int saturn_cd_hle_device::sega_cdrom_get_adr_control(int track)
 {
-	return bitswap<8>(m_cdrom_image->get_adr_control(cur_track),3,2,1,0,7,6,5,4);
+	return bitswap<8>(m_cdrom_image->get_adr_control(track),3,2,1,0,7,6,5,4);
 }
 
 void saturn_cd_hle_device::cr_standard_return(uint16_t cur_status)
 {
 	if (!m_cdrom_image->exists())
 	{
-		// TODO: are low byte + cr2~cr4 0, 0xff or preserve previous pickup values?
-		cr1 = cd_stat;
-		cr2 = 0;
-		cr3 = 0;
-		cr4 = 0;
+		// preserve whatever command is currently set
+		cr1 = cd_stat | (cr1 & 0xff);
+		//cr2 = 0;
+		//cr3 = 0;
+		//cr4 = 0;
 	}
 	else if ((cd_stat & 0x0f00) == CD_STAT_SEEK)
 	{
@@ -2124,10 +2126,12 @@ void saturn_cd_hle_device::cd_exec_command()
 		1)
 		logerror("Command exec %04x %04x %04x %04x %04x (stat %04x)\n", hirqreg, cr1, cr2, cr3, cr4, cd_stat);
 
-	if(!m_cdrom_image->exists() && ((cr1 >> 8) & 0xff) != 0x00) {
-		hirqreg |= (CMOK);
-		return;
-	}
+	// execute the command even if CD isn't in tray
+	// - BIOS will otherwise draw VDP2 garbage if tray is closed (seen commands: 0x01, 0x75, 0x67)
+	//if(!m_cdrom_image->exists() && ((cr1 >> 8) & 0xff) != 0x00) {
+	//	hirqreg |= (CMOK);
+	//	return;
+	//}
 
 	switch ((cr1 >> 8) & 0xff)
 	{
@@ -2583,9 +2587,7 @@ void saturn_cd_hle_device::cd_readTOC(void)
 	{
 		if (m_cdrom_image->exists())
 		{
-			//tocbuf[tocptr] = sega_cdrom_get_adr_control(cdrom, i);
-			// HACK: ddsom does not enter ingame with the line above
-			tocbuf[tocptr] = m_cdrom_image->get_adr_control(i)<<4 | 0x01;
+			tocbuf[tocptr] = sega_cdrom_get_adr_control(i);
 		}
 		else
 		{
@@ -2653,11 +2655,12 @@ saturn_cd_hle_device::partitionT *saturn_cd_hle_device::cd_filterdata(filterT *f
 	do
 	{
 		// FAD range check?
-		/* according to an obscure document note, this switches the filter connector to be false if the range fails ... I think ... */
-		// timegal, falcom2 uses this
+		// reject and try on the other filter connection
+		// - sfz2 and sonicjamj wouldn't repeat BGMs properly
+		// - timegal, falcom2 also uses this at very least
 		if (flt->mode & 0x40)
 		{
-			if ((cd_curfad < flt->fad) || (cd_curfad > (flt->fad + flt->range)))
+			if ((cd_curfad < flt->fad) || (cd_curfad >= (flt->fad + flt->range)))
 			{
 				LOGWARN("curfad reject %08x %08x %08x %08x\n",cd_curfad,fadstoplay,flt->fad,flt->fad+flt->range);
 				match = 0;
@@ -2706,6 +2709,7 @@ saturn_cd_hle_device::partitionT *saturn_cd_hle_device::cd_filterdata(filterT *f
 
 			if (flt->mode & 0x10)   // reverse subheader conditions
 			{
+				// TODO: this may not play well with curfad rejection
 				match ^= 1;
 			}
 		}
@@ -2863,6 +2867,9 @@ void saturn_cd_hle_device::cd_playdata()
 		}
 		case CD_STAT_SEEK:
 		{
+			if(!m_cdrom_image->exists())
+				return;
+
 			int32_t fad_diff;
 			// zdivide
 			// TODO: timings, may be too fast
