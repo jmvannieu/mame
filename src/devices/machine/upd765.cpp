@@ -398,6 +398,7 @@ void upd765_family_device::soft_reset()
 	cur_live.fi = nullptr;
 	tc_done = false;
 	st1 = st2 = st3 = 0x00;
+	xfer_in_progress = false;
 
 	set_ds(select_multiplexed ? 0 : -1);
 
@@ -588,7 +589,7 @@ uint8_t upd765_family_device::msr_r()
 		break;
 	case PHASE_EXEC:
 		msr |= MSR_CB;
-		if((spec & SPEC_ND) && internal_drq)
+		if((spec & SPEC_ND) && xfer_in_progress)
 			msr |= MSR_EXM;
 		if(internal_drq) {
 			msr |= MSR_RQM;
@@ -1881,7 +1882,7 @@ void upd765_family_device::read_data_start(floppy_info &fi)
 				cur_rate);
 
 	fi.st0 = command[1] & 7;
-	st1 = ST1_MA;
+	st1 = 0x00;
 	st2 = 0x00;
 	hdl_cb(1);
 	set_ds(command[1] & 3);
@@ -1898,6 +1899,7 @@ void upd765_family_device::read_data_start(floppy_info &fi)
 
 	if(fi.dev)
 		fi.dev->ss_w(command[1] & 4 ? 1 : 0);
+	st1 = ST1_MA | ST1_ND;
 	read_data_continue(fi);
 }
 
@@ -1925,7 +1927,7 @@ void upd765_family_device::scan_start(floppy_info &fi)
 				cur_rate);
 
 	fi.st0 = command[1] & 7;
-	st1 = ST1_MA;
+	st1 = 0x00;
 	st2 = 0x00;
 	scan_done = false;
 	hdl_cb(1);
@@ -1943,6 +1945,7 @@ void upd765_family_device::scan_start(floppy_info &fi)
 
 	if(fi.dev)
 		fi.dev->ss_w(command[1] & 4 ? 1 : 0);
+	st1 = ST1_MA | ST1_ND;
 	read_data_continue(fi);
 }
 
@@ -2036,6 +2039,7 @@ void upd765_family_device::read_data_continue(floppy_info &fi)
 			}
 			st1 &= ~ST1_ND;
 			st2 &= ~ST2_WC;
+			xfer_in_progress = true;
 			LOGRW("reading sector %02x %02x %02x %02x\n",
 						cur_live.idbuf[0],
 						cur_live.idbuf[1],
@@ -2059,6 +2063,7 @@ void upd765_family_device::read_data_continue(floppy_info &fi)
 
 		case SECTOR_READ: {
 			LOGSTATE("SECTOR_READ\n");
+			xfer_in_progress = false;
 			if(st2 & ST2_MD) {
 				fi.st0 |= ST0_FAIL;
 				fi.sub_state = COMMAND_DONE;
@@ -2155,7 +2160,7 @@ void upd765_family_device::write_data_start(floppy_info &fi)
 		fi.dev->ss_w(command[1] & 4 ? 1 : 0);
 
 	fi.st0 = command[1] & 7;
-	st1 = ST1_MA;
+	st1 = 0x00;
 	st2 = 0x00;
 	hdl_cb(1);
 	set_ds(command[1] & 3);
@@ -2178,6 +2183,7 @@ void upd765_family_device::write_data_start(floppy_info &fi)
 		return;
 	}
 
+	st1 = ST1_MA | ST1_ND;
 	write_data_continue(fi);
 }
 
@@ -2212,6 +2218,7 @@ void upd765_family_device::write_data_continue(floppy_info &fi)
 				break;
 			}
 			st1 &= ~ST1_MA;
+			xfer_in_progress = true;
 			LOGRW("writing sector %02x %02x %02x %02x\n",
 						cur_live.idbuf[0],
 						cur_live.idbuf[1],
@@ -2234,6 +2241,7 @@ void upd765_family_device::write_data_continue(floppy_info &fi)
 		case SECTOR_WRITTEN: {
 			LOGSTATE("SECTOR_WRITTEN\n");
 			bool done = tc_done;
+			xfer_in_progress = false;
 			if(command[4] == command[6]) {
 				if(command[0] & 0x80) {
 					command[3] = command[3] ^ 1;
@@ -2304,7 +2312,7 @@ void upd765_family_device::read_track_start(floppy_info &fi)
 				command[8],
 				cur_rate);
 	fi.st0 = command[1] & 7;
-	st1 = ST1_MA;
+	st1 = 0x00;
 	st2 = 0x00;
 	hdl_cb(1);
 	set_ds(command[1] & 3);
@@ -2321,6 +2329,7 @@ void upd765_family_device::read_track_start(floppy_info &fi)
 
 	if(fi.dev)
 		fi.dev->ss_w(command[1] & 4 ? 1 : 0);
+	st1 = ST1_MA | ST1_ND;
 	read_track_continue(fi);
 }
 
@@ -2407,6 +2416,7 @@ void upd765_family_device::read_track_continue(floppy_info &fi)
 			else
 				st1 &= ~ST1_ND;
 
+			xfer_in_progress = true;
 			sector_size = calc_sector_size(command[5]);
 			fifo_expect(sector_size, false);
 			fi.sub_state = SECTOR_READ;
@@ -2423,6 +2433,7 @@ void upd765_family_device::read_track_continue(floppy_info &fi)
 
 		case SECTOR_READ: {
 			LOGSTATE("SECTOR_READ\n");
+			xfer_in_progress = false;
 			if(st2 & ST2_MD) {
 				fi.st0 |= ST0_FAIL;
 				fi.sub_state = COMMAND_DONE;
