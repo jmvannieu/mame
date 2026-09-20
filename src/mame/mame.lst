@@ -1322,6 +1322,9 @@ macsefd
 unitron
 utrn1024
 
+@source:apple/macalchemy.cpp
+pmac6400
+
 @source:apple/maccatalyst.cpp
 pmac7200
 pmac7200_90
@@ -1331,6 +1334,16 @@ pmac7200_120
 @source:apple/maccordyceps.cpp
 pmac6200
 pmac5200
+
+@source:apple/macgazelle.cpp
+pmac5500
+pmac5500_250
+pmac5500_275
+pmac6500
+pmac6500_250
+pmac6500_275
+pmac6500_300
+pmac20th
 
 @source:apple/macii.cpp
 mac2fdhd
@@ -20874,7 +20887,9 @@ monty
 @source:handheld/mylife.cpp
 mylife
 mylifei
+mylifei4
 mylifes
+myrelife
 
 @source:handheld/pensebem.cpp
 pbem2017
@@ -32485,6 +32500,7 @@ nostk
 mcm70
 
 @source:misc/megaphx.cpp
+afterwar
 hamboy
 megaphx
 yoyospel
@@ -42368,7 +42384,7 @@ prc2ksu
 prikura
 puyosun
 rsgun
-sandor
+sandr
 sanjeon
 sackids
 sasissu
