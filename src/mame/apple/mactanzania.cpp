@@ -2,26 +2,17 @@
 // copyright-holders:R. Belmont
 /****************************************************************************
 
-	Power Macintosh x500 and Twentieth Anniversary Macintosh "Gazelle" hardware
-	Emulation by R. Belmont
+    Power Macintosh 4400 "Tanzania"hardware
+    Emulation by R. Belmont
 
-	Gazelle is a minor evolution of the Alchemy board, but it's a big upgrade.
-	Gone is Valkyrie-AR, and in is the ATI 264GT 3D RAGE.
+    Moving on from Gazelle we have this board, which was the basis for many
+    of the Mac clones in addition to the official Apple model.
 
-	Basic architecture:
-	- PowerPC 603e
-	- PSX+ (DRAM/ROM controller + Bandit PCI)
-	- ATI 264GT 3D RAGE
-	- O'Hare PCI-to-Mac I/O chip, same as in Power Mac 7500 "TNT"
-
-	Machine IDs:
-	0x30F0 - PM5500
-	0x30E0 - PM6500
-	0x70F0 - TAM
-
-	Slot IRQs: (TODO)
-	0x17 for slot 0xd, 0x19 for slot 0xe, 0x1c for slot 0xf,
-	and 0x16 for the Comm Slot II.
+    Basic architecture:
+    - PowerPC 603e
+    - PSX+ (DRAM/ROM controller + Bandit PCI)
+    - ATI 264VT 3D RAGE
+    - O'Hare PCI-to-Mac I/O chip
 
  ****************************************************************************/
 
@@ -53,20 +44,20 @@
 //#define LOG_OUTPUT_FUNC osd_printf_info
 #include "logmacro.h"
 
-static constexpr u32 MAIN_BUS_FREQUENCY = 50'000'000;
+static constexpr u32 MAIN_BUS_FREQUENCY = 40'000'000;
 
 namespace { // anonymous namespace
 
-class gazelle_state : public driver_device
+class tanzania_state : public driver_device
 {
 public:
-	gazelle_state(const machine_config &mconfig, device_type type, const char *tag) :
+	tanzania_state(const machine_config &mconfig, device_type type, const char *tag) :
 		driver_device(mconfig, type, tag),
 		m_maincpu(*this, "maincpu"),
 		m_pci_root(*this, "pci"),
 		m_psx(*this, "pci:00.0"),
 		m_ohare(*this, "pci:10.0"),
-		m_video(*this, "pci:12.0"),
+		m_video(*this, "pci:11.0"),
 		m_adbbus(*this, "adb"),
 		m_cuda(*this, "cuda"),
 		m_ram(*this, RAM_TAG),
@@ -75,37 +66,40 @@ public:
 	{
 	}
 
-	void gazelle(machine_config &config);
-	void gaz250(machine_config &config);
-	void gaz275(machine_config &config);
-	void gaz300(machine_config &config);
+	void pmac4400(machine_config &config);
+	void pmac4400_200(machine_config &config);
 
-	void pmac6500_map(address_map &map) ATTR_COLD;
+	void pmac4400_map(address_map &map) ATTR_COLD;
 
-	void init_pmac5500();
-	void init_pmac6500();
-	void init_tam();
+	void init_pmac4400();
+	void init_pmac4400_200();
 
 private:
 	required_device<ppc603e_device> m_maincpu;
 	required_device<pci_root_device> m_pci_root;
 	required_device<applpsx_host_device> m_psx;
 	required_device<ohare_device> m_ohare;
-	required_device<atirage_device> m_video;
+	required_device<atimach64vt_device> m_video;
 	required_device<adb_bus_device> m_adbbus;
 	required_device<cuda_device> m_cuda;
 	required_device<ram_device> m_ram;
 	required_device<nvram_device> m_nvram;
 	required_ioport m_monitor_config;
 
-	u16 m_sense;
+	u8 m_sense;
+	u16 m_board_register;
 	u8 m_nvram_data[0x2000];
 
 	virtual void machine_start() override ATTR_COLD;
 	virtual void machine_reset() override ATTR_COLD;
 
-	u16 read_sense();
-	void write_sense(u16 data);
+	u8 sense_lines();
+	u16 read_gpio();
+	void write_gpio(u16 data);
+	u8 read_dac_gio();
+	void write_dac_gio(u8 data);
+
+	u32 board_register_r(offs_t offset, u32 mem_mask);
 
 	void cuda_reset_w(int state)
 	{
@@ -116,46 +110,41 @@ private:
 	void slot_irq_handler(int line, int state);
 };
 
-void gazelle_state::machine_start()
+void tanzania_state::machine_start()
 {
 	m_nvram->set_base(&m_nvram_data[0], sizeof(m_nvram_data));
-	m_pci_root->set_irq_handler(pci_irq_handler(*this, FUNC(gazelle_state::slot_irq_handler)));
+	m_pci_root->set_irq_handler(pci_irq_handler(*this, FUNC(tanzania_state::slot_irq_handler)));
 
 	address_space &space = m_maincpu->space(AS_PROGRAM);
 	space.install_ram(0x00000000, m_ram->size() - 1, m_ram->pointer());
+
+	m_sense = 7;
+	save_item(NAME(m_sense));
 }
 
-void gazelle_state::machine_reset()
+void tanzania_state::machine_reset()
 {
 	m_maincpu->set_input_line(INPUT_LINE_HALT, ASSERT_LINE);
 }
 
-void gazelle_state::init_pmac5500()
-{
-	m_ohare->set_system_id(0x30f0);
-}
-
-void gazelle_state::init_pmac6500()
+// The ROM rejects boards with an O'Hare box ID nibble of 0 or F.
+// The model itself comes from the board register.
+void tanzania_state::init_pmac4400()
 {
 	m_ohare->set_system_id(0x30e0);
+	m_board_register = 0x443f; // Gestalt 514: 4400/160
 }
 
-void gazelle_state::init_tam()
+void tanzania_state::init_pmac4400_200()
 {
-	m_ohare->set_system_id(0x70f0);
+	m_ohare->set_system_id(0x30e0);
+	m_board_register = 0x403f; // Gestalt 515: 4400/200 and 7220
 }
 
-static constexpr u16 sense_to_gpio(u8 sense)
-{
-	return (BIT(sense, 0) << 8) | (BIT(sense, 1) << 12) | (BIT(sense, 2) << 13);
-}
-
-static constexpr u8 gpio_to_sense(u16 gpio)
-{
-	return BIT(gpio, 8) | (BIT(gpio, 12) << 1) | (BIT(gpio, 13) << 2);
-}
-
-u16 gazelle_state::read_sense()
+// The monitor sense lines are spread over two of the VT's registers: sense 0 is GP_IO 9, and
+// senses 1 and 2 are the DAC's GIO0 and GIO4 pins (DAC_CNTL).  m_sense has what the VT drives
+// onto the three lines, which are open collector with pullups.
+u8 tanzania_state::sense_lines()
 {
 	const u8 mon = m_monitor_config->read();
 
@@ -164,7 +153,7 @@ u16 gazelle_state::read_sense()
 	{
 		res = BIT(mon, 7) ? 6 : 7;
 
-		switch (gpio_to_sense(m_sense))
+		switch (m_sense)
 		{
 		case 0b011: // sense 2 pulled low: sense 1 and 0 return extended bits 5 and 4
 			res &= 4 | BIT(mon, 4, 2);
@@ -184,15 +173,48 @@ u16 gazelle_state::read_sense()
 		res = mon;
 	}
 
-	return sense_to_gpio(res);
+	// a line that the VT is pulling low reads back low
+	return res & m_sense;
 }
 
-void gazelle_state::write_sense(u16 data)
+// GP_IO 12 is looped back from the VT's own VSYNC output.  Open Firmware's ATY,264VT driver flips
+// the sync polarity with the CRTC stopped and only reads the sense lines (and sets the ATY,Flags
+// bit the Mac OS driver needs before it will) if this pin follows.  Presumably that tells
+// Apple's DA-15 board apart from the VGA/DDC clones sharing this ROM.
+u16 tanzania_state::read_gpio()
 {
-	m_sense = data;
+	return (BIT(sense_lines(), 0) << 9) | (m_video->vsync_r() << 12);
 }
 
-void gazelle_state::slot_irq_handler(int line, int state)
+void tanzania_state::write_gpio(u16 data)
+{
+	m_sense = (m_sense & 6) | BIT(data, 9);
+}
+
+u8 tanzania_state::read_dac_gio()
+{
+	const u8 lines = sense_lines();
+	return BIT(lines, 1) | (BIT(lines, 2) << 4);
+}
+
+void tanzania_state::write_dac_gio(u8 data)
+{
+	m_sense = (m_sense & 1) | (BIT(data, 0) << 1) | (BIT(data, 4) << 2);
+}
+
+// Board register on the O'Hare I/O bus, read as a little-endian 16-bit value
+// bit 15: set = enter the ROM's serial Test Manager after POST
+// bit 14: set = SWIM3 and floppy drive fitted (clear makes POST power down the floppy cell
+//         and Open Firmware leave the swim3 node out of the device tree)
+// bits 12-10: model.  Bit 10 clear is the 4400/200; with it set, bits 14, 12, and 11 pick the
+//         4400/160 (14 set, 11 clear) or one of the clone boards sharing this ROM.
+// bits 5-0: PRSNT1#/PRSNT2# from PCI slots C1, B1, and A1 (both high = slot empty)
+u32 tanzania_state::board_register_r(offs_t offset, u32 mem_mask)
+{
+	return m_board_register;
+}
+
+void tanzania_state::slot_irq_handler(int line, int state)
 {
 }
 
@@ -201,7 +223,7 @@ void gazelle_state::slot_irq_handler(int line, int state)
 ***************************************************************************/
 
 
-void gazelle_state::pmac6500_map(address_map &map)
+void tanzania_state::pmac4400_map(address_map &map)
 {
 	map(0xffc00000, 0xffffffff).rom().region("bootrom", 0);
 }
@@ -216,7 +238,7 @@ static constexpr u8 ext6(u8 bc, u8 ac, u8 ab)
 	return 0xc0 | (bc << 4) | (ac << 2) | ab;
 }
 
-static INPUT_PORTS_START( gazelle )
+static INPUT_PORTS_START( pmac4400 )
 	PORT_START("monitor")
 	PORT_CONFNAME(0xff, 0x06, "Monitor type")
 	PORT_CONFSETTING(0x00, u8"Mac 21\" Color Display (1152\u00d7870)")          // "RGB 2 Page" or "Kong"
@@ -232,11 +254,11 @@ static INPUT_PORTS_START( gazelle )
 	PORT_CONFSETTING(ext6(2, 0, 3), u8"Multiple Scan 21\"")
 INPUT_PORTS_END
 
-void gazelle_state::gazelle(machine_config &config)
+void tanzania_state::pmac4400(machine_config &config)
 {
-	PPC603E(config, m_maincpu, 225'000'000);
+	PPC603E(config, m_maincpu, 160'000'000);
 	m_maincpu->ppcdrc_set_options(PPCDRC_COMPATIBLE_OPTIONS | PPCDRC_MACOS_CACHE_HACK);
-	m_maincpu->set_addrmap(AS_PROGRAM, &gazelle_state::pmac6500_map);
+	m_maincpu->set_addrmap(AS_PROGRAM, &tanzania_state::pmac4400_map);
 	m_maincpu->set_bus_frequency(MAIN_BUS_FREQUENCY);
 	m_maincpu->set_tb_divisor(4);
 	config.set_perfect_quantum(m_maincpu);
@@ -244,11 +266,10 @@ void gazelle_state::gazelle(machine_config &config)
 	PCI_ROOT(config, m_pci_root, 0);
 	APPLPSX(config, m_psx, MAIN_BUS_FREQUENCY, "maincpu");
 	m_psx->set_dev_offset(1);
+	m_psx->set_system_id(0x10020000);
 
 	NVRAM(config, "nvram", nvram_device::DEFAULT_ALL_0);
 
-	// 8 MB built-in, 2x DIMM slots; modules can be 8, 16, 32 or 64 MB.
-	// note however that the PSX can support 5 memory banks.
 	RAM(config, m_ram);
 	m_ram->set_default_size("16M");
 	m_ram->set_extra_options("24M,32M,40M,64M,72M,96M,128M");
@@ -256,6 +277,7 @@ void gazelle_state::gazelle(machine_config &config)
 	OHARE(config, m_ohare);
 	m_ohare->set_maincpu_tag("maincpu");
 	m_ohare->irq_callback().set_inputline(m_maincpu, PPC_IRQ);
+	m_ohare->iobus_a_r_callback().set(FUNC(tanzania_state::board_register_r));
 
 	m_ohare->ata(0).slot(0).set_default_option("hdd");
 
@@ -282,11 +304,14 @@ void gazelle_state::gazelle(machine_config &config)
 	SOFTWARE_LIST(config, "hdd_list").set_original("mac_hdd");
 	SOFTWARE_LIST(config, "cd_list").set_original("mac_cdrom");
 
-	ATI_RAGEII(config, m_video, 14.318181_MHz_XTAL);
-	m_video->gpio_get_cb().set(FUNC(gazelle_state::read_sense));
-	m_video->gpio_set_cb().set(FUNC(gazelle_state::write_sense));
-	m_video->set_gpio_pullups(0x3100); // the 3 monitor sense lines are open collector
-	m_video->irq_cb().set(m_ohare, FUNC(ohare_device::set_irq_line<0x18>));
+	ATI_MACH64VT(config, m_video, 14.318181_MHz_XTAL);
+	m_video->gpio_get_cb().set(FUNC(tanzania_state::read_gpio));
+	m_video->gpio_set_cb().set(FUNC(tanzania_state::write_gpio));
+	m_video->set_gpio_pullups(0x0200); // the 3 monitor sense lines are open collector
+	m_video->dac_gio_get_cb().set(FUNC(tanzania_state::read_dac_gio));
+	m_video->dac_gio_set_cb().set(FUNC(tanzania_state::write_dac_gio));
+	m_video->set_dac_gio_pullups(0x11);
+	m_video->irq_cb().set(m_ohare, FUNC(ohare_device::set_irq_line<0x16>));
 
 	SPEAKER(config, "speaker", 2).front();
 	awacs.add_route(0, "speaker", 1.0, 0);
@@ -298,7 +323,7 @@ void gazelle_state::gazelle(machine_config &config)
 
 	CUDA_V2XX(config, m_cuda, XTAL(32'768));
 	m_cuda->set_default_bios_tag("341s0060");
-	m_cuda->reset_callback().set(FUNC(gazelle_state::cuda_reset_w));
+	m_cuda->reset_callback().set(FUNC(tanzania_state::cuda_reset_w));
 	m_cuda->linechange_callback().set(m_adbbus, FUNC(adb_bus_device::adb_host_line_w));
 	m_cuda->via_clock_callback().set(m_ohare, FUNC(ohare_device::cb1_w));
 	m_cuda->via_data_callback().set(m_ohare, FUNC(ohare_device::cb2_w));
@@ -312,48 +337,21 @@ void gazelle_state::gazelle(machine_config &config)
 	m_ohare->cb2_callback().set(m_cuda, FUNC(cuda_device::set_via_data));
 }
 
-void gazelle_state::gaz250(machine_config &config)
+void tanzania_state::pmac4400_200(machine_config &config)
 {
-	gazelle(config);
-	m_maincpu->set_clock(250'000'000);
-}
-void gazelle_state::gaz275(machine_config &config)
-{
-	gazelle(config);
-	m_maincpu->set_clock(275'000'000);
+	pmac4400(config);
+	m_maincpu->set_clock(200'000'000);
 }
 
-void gazelle_state::gaz300(machine_config &config)
-{
-	gazelle(config);
-	m_maincpu->set_clock(300'000'000);
-}
-
-ROM_START( pmac6500 )
+ROM_START( pmac4400 )
 	ROM_REGION64_BE(0x400000, "bootrom", 0)
-	ROM_LOAD("6e92fe08.rom", 0x000000, 0x400000, CRC(084646f4) SHA1(9c5fe05473650be61e582e42bc03ba4be6cf1072))
+	ROM_LOAD( "58f03416.rom", 0x000000, 0x400000, CRC(46476ff4) SHA1(ae1ff7f7c8247ed686024184705b7e831c6194c0) )
 ROM_END
 
-#define rom_pmac5500 rom_pmac6500
-#define rom_pmac5500_250 rom_pmac6500
-#define rom_pmac5500_275 rom_pmac6500
-#define rom_pmac6500_250 rom_pmac6500
-#define rom_pmac6500_275 rom_pmac6500
-#define rom_pmac6500_300 rom_pmac6500
-#define rom_pmac20th rom_pmac6500
+#define rom_pmac4400_200 rom_pmac4400
 
 } // anonymous namespace
 
-// 5500: 225, 250, 275
-// 6500: 225, 250, 275, 300
-// TAM: 250
-
-//    YEAR  NAME      PARENT    COMPAT  MACHINE   INPUT    CLASS           INIT            COMPANY           FULLNAME                   FLAGS
-COMP( 1997, pmac6500, 0,        0,      gazelle,  gazelle, gazelle_state, init_pmac6500,  "Apple Computer", "Power Macintosh 6500/225", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac6500_250, pmac6500, 0,  gaz250,   gazelle, gazelle_state, init_pmac6500,  "Apple Computer", "Power Macintosh 6500/250", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac6500_275, pmac6500, 0,  gaz275,   gazelle, gazelle_state, init_pmac6500,  "Apple Computer", "Power Macintosh 6500/275", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac6500_300, pmac6500, 0,  gaz300,   gazelle, gazelle_state, init_pmac6500,  "Apple Computer", "Power Macintosh 6500/300", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac5500, pmac6500, 0,      gazelle,  gazelle, gazelle_state, init_pmac5500,  "Apple Computer", "Power Macintosh 5500/225", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac5500_250, pmac6500, 0,  gaz250,   gazelle, gazelle_state, init_pmac5500,  "Apple Computer", "Power Macintosh 5500/250", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac5500_275, pmac6500, 0,  gaz275,   gazelle, gazelle_state, init_pmac5500,  "Apple Computer", "Power Macintosh 5500/275", MACHINE_SUPPORTS_SAVE)
-COMP( 1997, pmac20th, pmac6500, 0,      gaz250,   gazelle, gazelle_state, init_tam,       "Apple Computer", "Twentieth Anniversary Macintosh", MACHINE_SUPPORTS_SAVE)
+//    YEAR  NAME          PARENT    COMPAT  MACHINE       INPUT     CLASS           INIT               COMPANY           FULLNAME                    FLAGS
+COMP( 1996, pmac4400,     0,        0,      pmac4400,     pmac4400, tanzania_state, init_pmac4400,     "Apple Computer", "Power Macintosh 4400/160", MACHINE_SUPPORTS_SAVE)
+COMP( 1997, pmac4400_200, pmac4400, 0,      pmac4400_200, pmac4400, tanzania_state, init_pmac4400_200, "Apple Computer", "Power Macintosh 4400/200", MACHINE_SUPPORTS_SAVE)
