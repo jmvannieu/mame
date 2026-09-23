@@ -37664,6 +37664,7 @@ cdi490a
 cdi910
 cdibios
 cdimono1
+cdimono1n
 cdimono2
 gpi1200
 quizard
@@ -40067,6 +40068,10 @@ soldivid
 soldividk
 tgm2
 tgm2p
+
+@source:psion/geofox.cpp
+geofox
+geofox_us
 
 @source:psion/mc400.cpp
 mc200
